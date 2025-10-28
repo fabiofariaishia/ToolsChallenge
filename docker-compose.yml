@@ -1,0 +1,180 @@
+version: '3.8'
+
+services:
+  # PostgreSQL 15 - Banco de dados principal
+  postgres:
+    image: postgres:15-alpine
+    container_name: toolschallenge-postgres
+    environment:
+      POSTGRES_DB: pagamentos
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=pt_BR.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - toolschallenge-network
+
+  # Redis 7 - Cache e Idempotência (Lettuce)
+  redis:
+    image: redis:7-alpine
+    container_name: toolschallenge-redis
+    command: redis-server --appendonly yes --requirepass redis123
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - toolschallenge-network
+
+  # Zookeeper - Necessário para Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: toolschallenge-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - toolschallenge-network
+
+  # Kafka 3.x - Mensageria assíncrona
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: toolschallenge-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_DELETE_TOPIC_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9093"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - toolschallenge-network
+
+  # Kafka UI - Interface gráfica para gerenciar Kafka
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: toolschallenge-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9093
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      DYNAMIC_CONFIG_ENABLED: "true"
+    networks:
+      - toolschallenge-network
+
+  # Prometheus - Coleta de métricas
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: toolschallenge-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - toolschallenge-network
+
+  # Grafana - Visualização de métricas
+  grafana:
+    image: grafana/grafana:latest
+    container_name: toolschallenge-grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - toolschallenge-network
+
+  # Jaeger - Distributed Tracing (opcional, mencionado no README)
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: toolschallenge-jaeger
+    ports:
+      - "5775:5775/udp"  # accept zipkin.thrift over compact thrift protocol
+      - "6831:6831/udp"  # accept jaeger.thrift over compact thrift protocol
+      - "6832:6832/udp"  # accept jaeger.thrift over binary thrift protocol
+      - "5778:5778"      # serve configs
+      - "16686:16686"    # serve frontend
+      - "14268:14268"    # accept jaeger.thrift directly from clients
+      - "14250:14250"    # accept model.proto
+      - "9411:9411"      # Zipkin compatible endpoint
+    environment:
+      COLLECTOR_ZIPKIN_HOST_PORT: ":9411"
+      COLLECTOR_OTLP_ENABLED: "true"
+    networks:
+      - toolschallenge-network
+
+networks:
+  toolschallenge-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  zookeeper_data:
+    driver: local
+  zookeeper_logs:
+    driver: local
+  kafka_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
