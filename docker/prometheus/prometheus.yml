@@ -1,0 +1,60 @@
+# Prometheus Configuration
+# Coleta de métricas da API de Pagamentos
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'toolschallenge'
+    environment: 'development'
+
+# Alertmanager configuration (opcional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: []
+
+# Regras de alerta (opcional)
+# rule_files:
+#   - "alerts/*.yml"
+
+# Configuração de scrape
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # API de Pagamentos - Spring Boot Actuator
+  - job_name: 'toolschallenge-api'
+    metrics_path: '/atuador/prometheus'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+        labels:
+          application: 'toolschallenge'
+          service: 'api-pagamentos'
+          environment: 'development'
+
+  # PostgreSQL Exporter (caso queira adicionar no futuro)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #       labels:
+  #         service: 'postgres'
+
+  # Redis Exporter (caso queira adicionar no futuro)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+  #       labels:
+  #         service: 'redis'
+
+  # Kafka Exporter (caso queira adicionar no futuro)
+  # - job_name: 'kafka'
+  #   static_configs:
+  #     - targets: ['kafka-exporter:9308']
+  #       labels:
+  #         service: 'kafka'
