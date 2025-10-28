@@ -62,12 +62,14 @@ management:
   endpoint:
     health:
       show-details: always
-  metrics:
-    export:
-      prometheus:
+  prometheus:
+    metrics:
+      export:
         enabled: true
 
-# OpenAPI/Swagger
+        
+
+        # OpenAPI/Swagger
 springdoc:
   api-docs:
     path: /v3/api-docs
