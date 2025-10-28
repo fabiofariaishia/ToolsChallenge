@@ -637,4 +637,3 @@ Snowflake 64-bit → NSU (10 dígitos) = snowflake % 10^10
 
 ---
 
-**Pronto para iniciar a Fase 0!** 🚀
