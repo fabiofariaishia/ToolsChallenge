@@ -1,0 +1,2 @@
+# Bounded Context: Estorno
+# Responsável por: processamento de estornos com lock distribuído

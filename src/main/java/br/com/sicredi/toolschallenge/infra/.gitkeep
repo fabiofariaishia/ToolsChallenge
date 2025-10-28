@@ -1,0 +1,2 @@
+# Infra: Infraestrutura
+# Responsável por: outbox publisher, Kafka producer/consumer, idempotência, cache

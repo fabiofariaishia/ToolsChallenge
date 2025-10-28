@@ -1,0 +1,3 @@
+# Shared: Código Compartilhado
+# Responsável por: DTOs, eventos, utilitários, exceções comuns
+# Nota: Este pacote pode virar biblioteca Maven separada se extrair para microsserviços
