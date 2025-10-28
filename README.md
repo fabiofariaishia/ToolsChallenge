@@ -492,44 +492,160 @@ ToolsChallenge/
 
 ## 🛠️ Como Executar o Projeto
 
-> **Nota**: Instruções detalhadas de execução serão adicionadas conforme as fases forem implementadas.
-
 ### Pré-requisitos
-- Java 17+
-- Maven 3.9+
-- Docker + Docker Compose
-- (Opcional) k6, Postman/Insomnia
+- **Java 17+** (OpenJDK ou Oracle JDK)
+- **Maven 3.9+** (ou usar `mvnw` incluído)
+- **Docker Desktop** (4GB RAM mínimo)
+- **Docker Compose** (incluído no Docker Desktop)
+- (Opcional) k6, Postman/Insomnia para testes
 
-### Variáveis de Ambiente Principais
-_(Ver `.env.example` para lista completa)_
+### 1️⃣ Subir Infraestrutura (Docker Compose)
 
-```bash
-DATABASE_URL=jdbc:postgresql://localhost:5432/pagamentos
-REDIS_HOST=localhost
-KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-KEYCLOAK_REALM=pagamentos-realm
-JWT_ISSUER_URI=http://localhost:8080/realms/pagamentos-realm
+#### Opção A: Toda a infraestrutura (recomendado)
+```powershell
+# Subir todos os serviços (PostgreSQL, Redis, Kafka, Prometheus, Grafana, Jaeger)
+docker-compose up -d
+
+# Aguardar todos os serviços ficarem saudáveis
+docker-compose ps
+
+# Verificar logs (Ctrl+C para sair)
+docker-compose logs -f
 ```
 
-### Comandos Rápidos
-```bash
-# Subir infraestrutura
-docker-compose up -d postgres redis kafka keycloak
+#### Opção B: Infraestrutura mínima (desenvolvimento rápido)
+```powershell
+# Apenas PostgreSQL + Redis (suficiente para desenvolvimento básico)
+docker-compose up -d postgres redis
 
-# Build e testes
-mvn clean verify
+# Ou usar o script helper
+.\docker.ps1 minimal
+```
 
-# Executar aplicação
+#### Opção C: Usando o script PowerShell helper
+```powershell
+# Ver todos os comandos disponíveis
+.\docker.ps1
+
+# Iniciar tudo
+.\docker.ps1 up
+
+# Parar tudo
+.\docker.ps1 down
+
+# Ver logs
+.\docker.ps1 logs
+
+# Limpar tudo (remove volumes!)
+.\docker.ps1 clean
+```
+
+#### Serviços Disponíveis
+| Serviço | URL/Host | Credenciais |
+|---------|----------|-------------|
+| PostgreSQL | `localhost:5432` | `postgres/postgres` |
+| Redis | `localhost:6379` | password: `redis123` |
+| Kafka | `localhost:9092` | - |
+| Kafka UI | http://localhost:8081 | - |
+| Prometheus | http://localhost:9090 | - |
+| Grafana | http://localhost:3000 | `admin/admin123` |
+| Jaeger | http://localhost:16686 | - |
+
+> 📖 **Documentação completa**: Ver `docker/README.md` para troubleshooting e comandos avançados
+
+### 2️⃣ Configurar Variáveis de Ambiente (Opcional)
+
+```powershell
+# Copiar arquivo de exemplo
+Copy-Item .env.example .env
+
+# Editar conforme necessário (valores padrão já funcionam)
+notepad .env
+```
+
+Principais variáveis (já configuradas no `application.yml`):
+```properties
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=pagamentos
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=redis123
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+```
+
+### 3️⃣ Compilar e Executar Aplicação
+
+```powershell
+# Build (pulando testes - infraestrutura de testes será configurada na Fase 7)
+mvn clean install -DskipTests
+
+# Ou usando Maven wrapper (recomendado)
+.\mvnw clean install -DskipTests
+
+# Executar aplicação Spring Boot
 mvn spring-boot:run
 
-# Rodar testes de integração
+# Ou executar o JAR diretamente
+java -jar target\toolschallenge-0.0.1-SNAPSHOT.jar
+```
+
+A aplicação estará disponível em:
+- **API**: http://localhost:8080
+- **Swagger UI**: http://localhost:8080/swagger-ui.html
+- **Actuator**: http://localhost:8080/atuador/saude
+- **Métricas Prometheus**: http://localhost:8080/atuador/prometheus
+
+### 4️⃣ Verificar Saúde do Sistema
+
+```powershell
+# Health check da aplicação
+curl http://localhost:8080/atuador/saude
+
+# Verificar se PostgreSQL está acessível
+docker-compose exec postgres psql -U postgres -d pagamentos -c "SELECT version();"
+
+# Verificar Redis
+docker-compose exec redis redis-cli -a redis123 ping
+
+# Listar tópicos Kafka (deve estar vazio inicialmente)
+docker-compose exec kafka kafka-topics --bootstrap-server localhost:9093 --list
+```
+
+### 5️⃣ Comandos Úteis para Desenvolvimento
+
+```powershell
+# Recompilar sem limpar (mais rápido)
+mvn compile
+
+# Executar apenas testes unitários (quando disponíveis)
+mvn test
+
+# Executar testes de integração (Fase 7+)
 mvn verify -P integration-test
 
 # Gerar relatório de cobertura
 mvn jacoco:report
 
-# Análise de segurança
+# Análise de vulnerabilidades
 mvn dependency-check:check
+
+# Parar aplicação: Ctrl+C no terminal
+```
+
+### 6️⃣ Parar e Limpar Ambiente
+
+```powershell
+# Parar apenas a aplicação: Ctrl+C
+
+# Parar infraestrutura (mantém dados)
+docker-compose down
+
+# Parar E remover volumes (ATENÇÃO: apaga dados!)
+docker-compose down -v
+
+# Ou usando script helper
+.\docker.ps1 clean
 ```
 
 ---
