@@ -96,7 +96,7 @@ public class Pagamento {
      * Tipo de pagamento: AVISTA, PARCELADO_LOJA, PARCELADO_EMISSOR
      */
     @Enumerated(EnumType.STRING)
-    @Column(name = "tipo_pagamento", nullable = false, length = 30)
+    @Column(name = "tipo_pagamento", nullable = false, length = 20)
     private TipoPagamento tipoPagamento;
 
     /**
