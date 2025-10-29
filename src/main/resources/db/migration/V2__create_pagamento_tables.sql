@@ -25,7 +25,7 @@ CREATE TABLE pagamento.pagamento (
     
     -- Dados financeiros
     valor DECIMAL(15,2) NOT NULL CHECK (valor > 0),
-    moeda CHAR(3) NOT NULL DEFAULT 'BRL',
+    moeda VARCHAR(3) NOT NULL DEFAULT 'BRL',
     
     -- Data/hora da transação (armazenada em UTC)
     data_hora TIMESTAMP WITH TIME ZONE NOT NULL,
