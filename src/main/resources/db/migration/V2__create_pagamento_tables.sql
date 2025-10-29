@@ -6,12 +6,6 @@
 
 -- =============================================================================
 
--- Tipo ENUM para Status do Pagamento
-CREATE TYPE pagamento.status_pagamento AS ENUM ('PENDENTE', 'AUTORIZADO', 'NEGADO');
-
--- Tipo ENUM para Tipo de Pagamento
-CREATE TYPE pagamento.tipo_pagamento AS ENUM ('AVISTA', 'PARCELADO_LOJA', 'PARCELADO_EMISSOR');
-
 -- Tabela principal de Pagamentos
 CREATE TABLE pagamento.pagamento (
     -- Chave primária técnica (autoincrement)
@@ -21,7 +15,7 @@ CREATE TABLE pagamento.pagamento (
     id_transacao VARCHAR(50) NOT NULL UNIQUE,
     
     -- Status do pagamento
-    status pagamento.status_pagamento NOT NULL DEFAULT 'PENDENTE',
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDENTE' CHECK (status IN ('PENDENTE', 'AUTORIZADO', 'NEGADO')),
     
     -- Dados financeiros
     valor DECIMAL(15,2) NOT NULL CHECK (valor > 0),
@@ -34,7 +28,7 @@ CREATE TABLE pagamento.pagamento (
     estabelecimento VARCHAR(255) NOT NULL,
     
     -- Tipo e forma de pagamento
-    tipo_pagamento pagamento.tipo_pagamento NOT NULL,
+    tipo_pagamento VARCHAR(20) NOT NULL CHECK (tipo_pagamento IN ('AVISTA', 'PARCELADO_LOJA', 'PARCELADO_EMISSOR')),
     parcelas INTEGER NOT NULL CHECK (parcelas >= 1 AND parcelas <= 12),
     
     -- NSU e Código de Autorização (retornados pelo adquirente)

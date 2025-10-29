@@ -6,9 +6,6 @@
 
 -- =============================================================================
 
--- Tipo ENUM para Status do Estorno
-CREATE TYPE estorno.status_estorno AS ENUM ('PENDENTE', 'CANCELADO', 'NEGADO');
-
 -- Tabela principal de Estornos
 CREATE TABLE estorno.estorno (
     -- Chave primária técnica (autoincrement)
@@ -21,7 +18,7 @@ CREATE TABLE estorno.estorno (
     id_estorno VARCHAR(50) NOT NULL UNIQUE,
     
     -- Status do estorno
-    status estorno.status_estorno NOT NULL DEFAULT 'PENDENTE',
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDENTE' CHECK (status IN ('PENDENTE', 'CANCELADO', 'NEGADO')),
     
     -- Valor a ser estornado (sempre valor total do pagamento)
     valor DECIMAL(15,2) NOT NULL CHECK (valor > 0),
