@@ -84,51 +84,268 @@ Invoke-RestMethod -Uri "http://localhost:8080/estornos/status/PENDENTE" -Method 
 
 ---
 
-## ❌ Validações - Exemplos de Erros
+## ❌ Validações e Tratamento de Erros
 
-### 1. Estorno de pagamento não autorizado
+### 1. Recurso não encontrado (404)
+
+**Estorno inexistente:**
+```powershell
+$response = try {
+    Invoke-WebRequest -Uri "http://localhost:8080/estornos/99999999-9999-9999-9999-999999999999" -Method GET -ErrorAction Stop
+} catch {
+    $_.Exception.Response
+}
+
+$reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+$body = $reader.ReadToEnd() | ConvertFrom-Json
+$body | Format-List
+```
+
+**Resposta esperada:**
+```json
+{
+  "timestamp": "2025-10-29T21:30:00",
+  "status": 404,
+  "erro": "Not Found",
+  "mensagem": "Estorno não encontrado(a) com identificador: 99999999-9999-9999-9999-999999999999",
+  "caminho": "/estornos/99999999-9999-9999-9999-999999999999",
+  "traceId": "f7e8d9c0"
+}
+```
+
+**Pagamento inexistente:**
 ```powershell
 $estorno = @{
-    idTransacao = "ID_DE_PAGAMENTO_NEGADO"
+    idTransacao = "99999999-9999-9999-9999-999999999999"
     valor = 100.00
     motivo = "Teste"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:8080/estornos" -Method POST -Body $estorno -ContentType "application/json"
-```
-**Esperado**: 409 Conflict - "Apenas pagamentos AUTORIZADOS podem ser estornados"
+$response = try {
+    Invoke-WebRequest -Uri "http://localhost:8080/estornos" -Method POST -Body $estorno -ContentType "application/json" -ErrorAction Stop
+} catch {
+    $_.Exception.Response
+}
 
-### 2. Valor diferente do pagamento original
+$reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+$body = $reader.ReadToEnd() | ConvertFrom-Json
+Write-Host "Mensagem: $($body.mensagem)" -ForegroundColor White
+```
+
+**Resposta esperada:**
+```json
+{
+  "timestamp": "2025-10-29T21:31:00",
+  "status": 404,
+  "erro": "Not Found",
+  "mensagem": "Pagamento não encontrado(a) com identificador: 99999999-9999-9999-9999-999999999999",
+  "caminho": "/estornos",
+  "traceId": "a1b2c3d4"
+}
+```
+
+---
+
+### 2. Regras de negócio (400)
+
+**Estorno de pagamento não autorizado:**
 ```powershell
 $estorno = @{
-    idTransacao = "ID_VALIDO"
-    valor = 50.00  # Valor parcial
+    idTransacao = "TXN-002-2025-PARCELADO-LOJA"  # Pagamento NEGADO nos dados seed
+    valor = 299.99
+    motivo = "Teste validação"
+} | ConvertTo-Json
+
+$response = try {
+    Invoke-WebRequest -Uri "http://localhost:8080/estornos" -Method POST -Body $estorno -ContentType "application/json" -ErrorAction Stop
+} catch {
+    $_.Exception.Response
+}
+
+$reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+$body = $reader.ReadToEnd() | ConvertFrom-Json
+Write-Host "Tipo: $($body.erro)" -ForegroundColor Cyan
+Write-Host "Mensagem: $($body.mensagem)" -ForegroundColor White
+Write-Host "TraceId: $($body.traceId)" -ForegroundColor Gray
+```
+
+**Resposta esperada:**
+```json
+{
+  "timestamp": "2025-10-29T21:32:00",
+  "status": 400,
+  "erro": "Bad Request",
+  "mensagem": "Apenas pagamentos AUTORIZADOS podem ser estornados. Status atual: NEGADO",
+  "caminho": "/estornos",
+  "traceId": "i9j0k1l2"
+}
+```
+
+**Estorno parcial (não permitido):**
+```powershell
+# Primeiro criar um pagamento AUTORIZADO
+$pagamento = @{
+    valor = 500.00
+    moeda = "BRL"
+    estabelecimento = "Loja Teste"
+    tipoPagamento = "AVISTA"
+    parcelas = 1
+    cartaoMascarado = "4111********1111"
+} | ConvertTo-Json
+
+$respPagamento = Invoke-RestMethod -Uri "http://localhost:8080/pagamentos" -Method POST -Body $pagamento -ContentType "application/json"
+
+# Tentar estornar apenas metade do valor
+$estorno = @{
+    idTransacao = $respPagamento.idTransacao
+    valor = 250.00  # Metade do valor
     motivo = "Estorno parcial"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:8080/estornos" -Method POST -Body $estorno -ContentType "application/json"
-```
-**Esperado**: 400 Bad Request - "Estorno parcial não permitido"
+$response = try {
+    Invoke-WebRequest -Uri "http://localhost:8080/estornos" -Method POST -Body $estorno -ContentType "application/json" -ErrorAction Stop
+} catch {
+    $_.Exception.Response
+}
 
-### 3. Pagamento não encontrado
+$reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+$body = $reader.ReadToEnd() | ConvertFrom-Json
+Write-Host "Mensagem: $($body.mensagem)" -ForegroundColor White
+```
+
+**Resposta esperada:**
+```json
+{
+  "timestamp": "2025-10-29T21:33:00",
+  "status": 400,
+  "erro": "Bad Request",
+  "mensagem": "Estorno parcial não permitido. Valor do pagamento: R$ 500,00",
+  "caminho": "/estornos",
+  "traceId": "e5f6g7h8"
+}
+```
+
+**Estorno duplicado:**
+```powershell
+# Criar pagamento
+$pagamento = @{
+    valor = 300.00
+    moeda = "BRL"
+    estabelecimento = "Loja Teste"
+    tipoPagamento = "AVISTA"
+    parcelas = 1
+    cartaoMascarado = "4111********1111"
+} | ConvertTo-Json
+
+$respPagamento = Invoke-RestMethod -Uri "http://localhost:8080/pagamentos" -Method POST -Body $pagamento -ContentType "application/json"
+
+# Primeiro estorno (deve funcionar)
+$estorno = @{
+    idTransacao = $respPagamento.idTransacao
+    valor = 300.00
+    motivo = "Primeiro estorno"
+} | ConvertTo-Json
+
+$respEstorno = Invoke-RestMethod -Uri "http://localhost:8080/estornos" -Method POST -Body $estorno -ContentType "application/json"
+Write-Host "Primeiro estorno: $($respEstorno.status)" -ForegroundColor Green
+
+# Segundo estorno (deve falhar se o primeiro foi CANCELADO)
+if ($respEstorno.status -eq "CANCELADO") {
+    Start-Sleep -Seconds 1
+    $estorno2 = @{
+        idTransacao = $respPagamento.idTransacao
+        valor = 300.00
+        motivo = "Tentativa duplicada"
+    } | ConvertTo-Json
+
+    $response = try {
+        Invoke-WebRequest -Uri "http://localhost:8080/estornos" -Method POST -Body $estorno2 -ContentType "application/json" -ErrorAction Stop
+    } catch {
+        $_.Exception.Response
+    }
+
+    $reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+    $body = $reader.ReadToEnd() | ConvertFrom-Json
+    Write-Host "Mensagem: $($body.mensagem)" -ForegroundColor Yellow
+}
+```
+
+**Resposta esperada:**
+```json
+{
+  "timestamp": "2025-10-29T21:34:00",
+  "status": 400,
+  "erro": "Bad Request",
+  "mensagem": "Já existe um estorno processado para este pagamento",
+  "caminho": "/estornos",
+  "traceId": "k1l2m3n4"
+}
+```
+
+---
+
+### 3. Validação de campos (400)
+
+**Valor inválido:**
 ```powershell
 $estorno = @{
-    idTransacao = "uuid-inexistente"
-    valor = 100.00
+    idTransacao = "TXN-001-2025-AVISTA"
+    valor = -50.00  # Valor negativo
     motivo = "Teste"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:8080/estornos" -Method POST -Body $estorno -ContentType "application/json"
-```
-**Esperado**: 400 Bad Request - "Pagamento não encontrado"
+$response = try {
+    Invoke-WebRequest -Uri "http://localhost:8080/estornos" -Method POST -Body $estorno -ContentType "application/json" -ErrorAction Stop
+} catch {
+    $_.Exception.Response
+}
 
-### 4. Estorno duplicado
-```powershell
-# Tentar estornar o mesmo pagamento duas vezes
-# (Primeiro estorno foi CANCELADO)
-Invoke-RestMethod -Uri "http://localhost:8080/estornos" -Method POST -Body $estorno -ContentType "application/json"
+$reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+$json = $reader.ReadToEnd() | ConvertFrom-Json
+Write-Host "`nErros de Validação:" -ForegroundColor Cyan
+$json.errosValidacao | Format-Table campo, mensagem, valorRejeitado -AutoSize
 ```
-**Esperado**: 409 Conflict - "Já existe um estorno processado para este pagamento"
+
+**Resposta esperada:**
+```json
+{
+  "timestamp": "2025-10-29T21:35:00",
+  "status": 400,
+  "erro": "Bad Request",
+  "mensagem": "Dados inválidos na requisição",
+  "caminho": "/estornos",
+  "errosValidacao": [
+    {
+      "campo": "valor",
+      "valorRejeitado": -50.0,
+      "mensagem": "deve ser maior que 0.01"
+    }
+  ],
+  "traceId": "o5p6q7r8"
+}
+```
+
+---
+
+## 📊 Estrutura de Resposta de Erro
+
+Todas as respostas de erro seguem o padrão do Global Exception Handler:
+
+```typescript
+{
+  timestamp: string;        // ISO 8601 format
+  status: number;           // HTTP status code (400, 404, 500)
+  erro: string;             // HTTP status name
+  mensagem: string;         // Mensagem principal do erro
+  caminho: string;          // Path da requisição
+  errosValidacao?: Array<{  // Opcional: erros de validação de campos
+    campo: string;
+    valorRejeitado: any;
+    mensagem: string;
+  }>;
+  traceId: string;          // ID de rastreamento (8 chars UUID)
+}
+```
 
 ---
 

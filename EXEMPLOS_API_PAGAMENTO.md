@@ -163,12 +163,44 @@ Invoke-RestMethod -Uri "http://localhost:8080/pagamentos/status/PENDENTE" -Metho
 
 ---
 
-## ❌ Validações - Exemplos de Erros
+## ❌ Validações e Tratamento de Erros
 
-### 1. Valor inválido (negativo)
+### 1. Recurso não encontrado (404)
+
+**Pagamento inexistente:**
+```powershell
+# Tentar buscar pagamento com ID inválido
+$response = try {
+    Invoke-WebRequest -Uri "http://localhost:8080/pagamentos/99999999-9999-9999-9999-999999999999" -Method GET -ErrorAction Stop
+} catch {
+    $_.Exception.Response
+}
+
+$reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+$body = $reader.ReadToEnd() | ConvertFrom-Json
+$body | Format-List
+```
+
+**Resposta esperada:**
+```json
+{
+  "timestamp": "2025-10-29T21:30:00",
+  "status": 404,
+  "erro": "Not Found",
+  "mensagem": "Pagamento não encontrado(a) com identificador: 99999999-9999-9999-9999-999999999999",
+  "caminho": "/pagamentos/99999999-9999-9999-9999-999999999999",
+  "traceId": "c90a8a91"
+}
+```
+
+---
+
+### 2. Validação de campos (400)
+
+**Valor negativo:**
 ```powershell
 $body = @{
-    valor = -10.00
+    valor = -100.00
     moeda = "BRL"
     estabelecimento = "Teste"
     tipoPagamento = "AVISTA"
@@ -176,11 +208,38 @@ $body = @{
     cartaoMascarado = "4111********1111"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:8080/pagamentos" -Method POST -Body $body -ContentType "application/json"
-```
-**Esperado**: 400 Bad Request - "Valor mínimo é R$ 0,01"
+$response = try {
+    Invoke-WebRequest -Uri "http://localhost:8080/pagamentos" -Method POST -Body $body -ContentType "application/json" -ErrorAction Stop
+} catch {
+    $_.Exception.Response
+}
 
-### 2. Parcelas inválidas para À Vista
+$reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+$json = $reader.ReadToEnd() | ConvertFrom-Json
+Write-Host "`nErros de Validação:" -ForegroundColor Cyan
+$json.errosValidacao | Format-Table campo, mensagem, valorRejeitado -AutoSize
+```
+
+**Resposta esperada:**
+```json
+{
+  "timestamp": "2025-10-29T21:31:00",
+  "status": 400,
+  "erro": "Bad Request",
+  "mensagem": "Dados inválidos na requisição",
+  "caminho": "/pagamentos",
+  "errosValidacao": [
+    {
+      "campo": "valor",
+      "valorRejeitado": -100.0,
+      "mensagem": "Valor mínimo é R$ 0,01"
+    }
+  ],
+  "traceId": "3121e118"
+}
+```
+
+**Parcelas inválidas para À Vista:**
 ```powershell
 $body = @{
     valor = 100.00
@@ -191,11 +250,20 @@ $body = @{
     cartaoMascarado = "4111********1111"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:8080/pagamentos" -Method POST -Body $body -ContentType "application/json"
-```
-**Esperado**: 400 Bad Request - "Pagamento à vista deve ter apenas 1 parcela"
+$response = try {
+    Invoke-WebRequest -Uri "http://localhost:8080/pagamentos" -Method POST -Body $body -ContentType "application/json" -ErrorAction Stop
+} catch {
+    $_.Exception.Response
+}
 
-### 3. Cartão mascarado inválido
+$reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+$json = $reader.ReadToEnd() | ConvertFrom-Json
+$json.errosValidacao | Format-Table campo, mensagem -AutoSize
+```
+
+**Resposta esperada:** 400 Bad Request - "Pagamento à vista deve ter apenas 1 parcela"
+
+**Cartão mascarado inválido:**
 ```powershell
 $body = @{
     valor = 100.00
@@ -203,12 +271,73 @@ $body = @{
     estabelecimento = "Teste"
     tipoPagamento = "AVISTA"
     parcelas = 1
-    cartaoMascarado = "4111-1111-1111-1111"
+    cartaoMascarado = "123"  # Muito curto
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:8080/pagamentos" -Method POST -Body $body -ContentType "application/json"
+$response = try {
+    Invoke-WebRequest -Uri "http://localhost:8080/pagamentos" -Method POST -Body $body -ContentType "application/json" -ErrorAction Stop
+} catch {
+    $_.Exception.Response
+}
+
+$reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+$json = $reader.ReadToEnd() | ConvertFrom-Json
+$json.errosValidacao | Format-Table campo, mensagem -AutoSize
 ```
-**Esperado**: 400 Bad Request - "Cartão mascarado deve estar no formato: 4111********1111"
+
+**Resposta esperada:** 400 Bad Request - "Cartão mascarado deve estar no formato: 4111********1111"
+
+---
+
+### 3. Tipo de argumento inválido (400)
+
+**Status com valor inválido:**
+```powershell
+# Passar valor inválido para enum
+$response = try {
+    Invoke-WebRequest -Uri "http://localhost:8080/pagamentos/status/INVALIDO" -Method GET -ErrorAction Stop
+} catch {
+    $_.Exception.Response
+}
+
+$reader = [System.IO.StreamReader]::new($response.GetResponseStream())
+$body = $reader.ReadToEnd() | ConvertFrom-Json
+Write-Host "Mensagem: $($body.mensagem)" -ForegroundColor White
+```
+
+**Resposta esperada:**
+```json
+{
+  "timestamp": "2025-10-29T21:33:00",
+  "status": 400,
+  "erro": "Bad Request",
+  "mensagem": "Parâmetro 'status' com valor 'INVALIDO' não pode ser convertido para o tipo 'StatusPagamento'",
+  "caminho": "/pagamentos/status/INVALIDO",
+  "traceId": "a1b2c3d4"
+}
+```
+
+---
+
+## 📊 Estrutura de Resposta de Erro
+
+Todas as respostas de erro seguem o padrão do Global Exception Handler:
+
+```typescript
+{
+  timestamp: string;        // ISO 8601 format
+  status: number;           // HTTP status code
+  erro: string;             // HTTP status name
+  mensagem: string;         // Mensagem principal do erro
+  caminho: string;          // Path da requisição
+  errosValidacao?: Array<{  // Opcional: erros de validação de campos
+    campo: string;
+    valorRejeitado: any;
+    mensagem: string;
+  }>;
+  traceId: string;          // ID de rastreamento (8 chars UUID)
+}
+```
 
 ---
 
