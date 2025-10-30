@@ -6,6 +6,7 @@ import br.com.sicredi.toolschallenge.pagamento.dto.PagamentoRequestDTO;
 import br.com.sicredi.toolschallenge.pagamento.dto.PagamentoResponseDTO;
 import br.com.sicredi.toolschallenge.pagamento.dto.PagamentoMapper;
 import br.com.sicredi.toolschallenge.pagamento.repository.PagamentoRepository;
+import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -97,7 +98,7 @@ public class PagamentoService {
         Pagamento pagamento = repository.findByIdTransacao(idTransacao)
             .orElseThrow(() -> {
                 log.warn("Pagamento não encontrado: {}", idTransacao);
-                return new IllegalArgumentException("Pagamento não encontrado: " + idTransacao);
+                return new RecursoNaoEncontradoException("Pagamento", idTransacao);
             });
         
         return mapper.toDTO(pagamento);

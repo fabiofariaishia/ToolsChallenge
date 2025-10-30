@@ -9,6 +9,8 @@ import br.com.sicredi.toolschallenge.estorno.repository.EstornoRepository;
 import br.com.sicredi.toolschallenge.pagamento.domain.Pagamento;
 import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
 import br.com.sicredi.toolschallenge.pagamento.repository.PagamentoRepository;
+import br.com.sicredi.toolschallenge.shared.exception.NegocioException;
+import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -62,14 +64,14 @@ public class EstornoService {
         Pagamento pagamento = pagamentoRepository.findByIdTransacao(request.getIdTransacao())
             .orElseThrow(() -> {
                 log.warn("Pagamento não encontrado: {}", request.getIdTransacao());
-                return new IllegalArgumentException("Pagamento não encontrado: " + request.getIdTransacao());
+                return new RecursoNaoEncontradoException("Pagamento", request.getIdTransacao());
             });
 
         // 2. Validar se pagamento está AUTORIZADO
         if (pagamento.getStatus() != StatusPagamento.AUTORIZADO) {
             log.warn("Tentativa de estornar pagamento com status {}: {}", 
                 pagamento.getStatus(), request.getIdTransacao());
-            throw new IllegalStateException(
+            throw new NegocioException(
                 "Apenas pagamentos AUTORIZADOS podem ser estornados. Status atual: " + pagamento.getStatus()
             );
         }
@@ -78,7 +80,7 @@ public class EstornoService {
         if (request.getValor().compareTo(pagamento.getValor()) != 0) {
             log.warn("Valor de estorno (R$ {}) diferente do valor do pagamento (R$ {})", 
                 request.getValor(), pagamento.getValor());
-            throw new IllegalArgumentException(
+            throw new NegocioException(
                 String.format("Estorno parcial não permitido. Valor do pagamento: R$ %.2f", 
                     pagamento.getValor())
             );
@@ -90,7 +92,7 @@ public class EstornoService {
         if (tempoDecorrido.toHours() > 24) {
             log.warn("Estorno solicitado após 24h. Pagamento: {}, Horas decorridas: {}", 
                 request.getIdTransacao(), tempoDecorrido.toHours());
-            throw new IllegalStateException(
+            throw new NegocioException(
                 "Estorno só pode ser solicitado dentro de 24 horas. Tempo decorrido: " + 
                 tempoDecorrido.toHours() + " horas"
             );
@@ -102,7 +104,7 @@ public class EstornoService {
         );
         if (existeEstornoCancelado) {
             log.warn("Já existe estorno CANCELADO para o pagamento: {}", request.getIdTransacao());
-            throw new IllegalStateException(
+            throw new NegocioException(
                 "Já existe um estorno processado para este pagamento"
             );
         }
@@ -142,7 +144,7 @@ public class EstornoService {
         Estorno estorno = repository.findByIdEstorno(idEstorno)
             .orElseThrow(() -> {
                 log.warn("Estorno não encontrado: {}", idEstorno);
-                return new IllegalArgumentException("Estorno não encontrado: " + idEstorno);
+                return new RecursoNaoEncontradoException("Estorno", idEstorno);
             });
 
         return mapper.paraDTO(estorno);
