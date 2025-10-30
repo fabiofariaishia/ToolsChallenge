@@ -4,6 +4,7 @@ import br.com.sicredi.toolschallenge.estorno.domain.StatusEstorno;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoRequestDTO;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoResponseDTO;
 import br.com.sicredi.toolschallenge.estorno.service.EstornoService;
+import br.com.sicredi.toolschallenge.infra.idempotencia.annotation.Idempotente;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -19,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Controller REST para operações de Estorno.
@@ -46,9 +48,10 @@ public class EstornoController {
      * @return 201 Created com DTO de resposta
      */
     @PostMapping
+    @Idempotente(ttl = 24, unidadeTempo = TimeUnit.HOURS)
     @Operation(
         summary = "Criar novo estorno",
-        description = "Solicita o estorno de um pagamento autorizado. Apenas estorno total é permitido, dentro de 24 horas."
+        description = "Solicita o estorno de um pagamento autorizado. Apenas estorno total é permitido, dentro de 24 horas. Requer header 'Idempotency-Key'."
     )
     @ApiResponses({
         @ApiResponse(
@@ -58,7 +61,7 @@ public class EstornoController {
         ),
         @ApiResponse(
             responseCode = "400",
-            description = "Dados inválidos (valor incorreto, pagamento não encontrado, etc.)"
+            description = "Dados inválidos (valor incorreto, pagamento não encontrado, header 'Idempotency-Key' ausente, etc.)"
         ),
         @ApiResponse(
             responseCode = "409",

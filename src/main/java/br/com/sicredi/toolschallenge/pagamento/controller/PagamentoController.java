@@ -4,6 +4,7 @@ import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
 import br.com.sicredi.toolschallenge.pagamento.dto.PagamentoRequestDTO;
 import br.com.sicredi.toolschallenge.pagamento.dto.PagamentoResponseDTO;
 import br.com.sicredi.toolschallenge.pagamento.service.PagamentoService;
+import br.com.sicredi.toolschallenge.infra.idempotencia.annotation.Idempotente;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -19,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Controller REST para operações de Pagamento.
@@ -47,9 +49,10 @@ public class PagamentoController {
      * @return 201 Created com DTO de resposta e Location header
      */
     @PostMapping
+    @Idempotente(ttl = 24, unidadeTempo = TimeUnit.HOURS)
     @Operation(
         summary = "Criar novo pagamento",
-        description = "Cria uma nova transação de pagamento e retorna o resultado da autorização"
+        description = "Cria uma nova transação de pagamento e retorna o resultado da autorização. Requer header 'Idempotency-Key' para evitar duplicação."
     )
     @ApiResponses({
         @ApiResponse(
@@ -59,7 +62,7 @@ public class PagamentoController {
         ),
         @ApiResponse(
             responseCode = "400",
-            description = "Dados inválidos na requisição"
+            description = "Dados inválidos na requisição ou header 'Idempotency-Key' ausente"
         ),
         @ApiResponse(
             responseCode = "500",
