@@ -23,6 +23,14 @@ import java.util.Optional;
 public interface EstornoRepository extends JpaRepository<Estorno, Long> {
     
     /**
+     * Busca estorno pelo ID único do estorno.
+     * 
+     * @param idEstorno UUID do estorno
+     * @return Optional com o estorno se encontrado
+     */
+    Optional<Estorno> findByIdEstorno(String idEstorno);
+    
+    /**
      * Busca todos os estornos de um pagamento específico.
      * 
      * @param idTransacao UUID da transação do pagamento original
