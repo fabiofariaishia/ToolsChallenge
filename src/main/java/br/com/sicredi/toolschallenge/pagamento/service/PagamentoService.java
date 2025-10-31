@@ -5,7 +5,10 @@ import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
 import br.com.sicredi.toolschallenge.pagamento.dto.PagamentoRequestDTO;
 import br.com.sicredi.toolschallenge.pagamento.dto.PagamentoResponseDTO;
 import br.com.sicredi.toolschallenge.pagamento.dto.PagamentoMapper;
+import br.com.sicredi.toolschallenge.pagamento.events.PagamentoCriadoEvento;
+import br.com.sicredi.toolschallenge.pagamento.events.PagamentoStatusAlteradoEvento;
 import br.com.sicredi.toolschallenge.pagamento.repository.PagamentoRepository;
+import br.com.sicredi.toolschallenge.infra.outbox.publisher.EventoPublisher;
 import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +38,7 @@ public class PagamentoService {
 
     private final PagamentoRepository repository;
     private final PagamentoMapper mapper;
+    private final EventoPublisher eventoPublisher;
     private final Random random = new Random();
 
     /**
@@ -74,11 +78,20 @@ public class PagamentoService {
         pagamento = repository.save(pagamento);
         log.info("Pagamento criado com ID: {}, Status: PENDENTE", pagamento.getIdTransacao());
         
+        // Publicar evento: Pagamento Criado
+        publicarEventoPagamentoCriado(pagamento);
+        
         // Simular autorização com adquirente
+        StatusPagamento statusAnterior = pagamento.getStatus();
         simularAutorizacao(pagamento);
         
         // Salvar com novo status
         pagamento = repository.save(pagamento);
+        
+        // Publicar evento: Status Alterado (se mudou)
+        if (!statusAnterior.equals(pagamento.getStatus())) {
+            publicarEventoStatusAlterado(pagamento, statusAnterior);
+        }
         
         log.info("Pagamento {} finalizado - Status: {}", 
             pagamento.getIdTransacao(), pagamento.getStatus());
@@ -186,7 +199,6 @@ public class PagamentoService {
     /**
      * Gera Snowflake ID simulado (time-sortable unique ID).
      * 
-     * Em produção, usar biblioteca como Twitter Snowflake ou similar.
      * Formato: timestamp + worker ID + sequence
      * 
      * @return Snowflake ID (15 dígitos para caber em BIGINT)
@@ -196,5 +208,56 @@ public class PagamentoService {
         long timestamp = System.currentTimeMillis() % 100000000L; // 8 dígitos
         long randomPart = random.nextInt(10000000); // 7 dígitos
         return (timestamp * 10000000L) + randomPart;
+    }
+
+    /**
+     * Publica evento de pagamento criado no outbox.
+     * 
+     * @param pagamento Pagamento criado
+     */
+    private void publicarEventoPagamentoCriado(Pagamento pagamento) {
+        try {
+            PagamentoCriadoEvento evento = PagamentoCriadoEvento.builder()
+                    .idPagamento(pagamento.getId())
+                    .idTransacao(pagamento.getIdTransacao())
+                    .descricao(pagamento.getEstabelecimento())
+                    .valor(pagamento.getValor())
+                    .metodoPagamento(pagamento.getTipoPagamento().name())
+                    .formaPagamento(pagamento.getTipoPagamento().name())
+                    .status(pagamento.getStatus().name())
+                    .criadoEm(pagamento.getDataHora())
+                    .build();
+
+            eventoPublisher.publicarPagamentoCriado(evento);
+            
+        } catch (Exception e) {
+            log.error("Erro ao publicar evento de pagamento criado: {}", pagamento.getIdTransacao(), e);
+            // Não propaga exception para não impactar fluxo principal
+        }
+    }
+
+    /**
+     * Publica evento de status alterado no outbox.
+     * 
+     * @param pagamento Pagamento atualizado
+     * @param statusAnterior Status anterior
+     */
+    private void publicarEventoStatusAlterado(Pagamento pagamento, StatusPagamento statusAnterior) {
+        try {
+            PagamentoStatusAlteradoEvento evento = PagamentoStatusAlteradoEvento.builder()
+                    .idPagamento(pagamento.getId())
+                    .idTransacao(pagamento.getIdTransacao())
+                    .statusAnterior(statusAnterior.name())
+                    .statusNovo(pagamento.getStatus().name())
+                    .alteradoEm(OffsetDateTime.now())
+                    .motivo("Autorização processada")
+                    .build();
+
+            eventoPublisher.publicarPagamentoStatusAlterado(evento);
+            
+        } catch (Exception e) {
+            log.error("Erro ao publicar evento de status alterado: {}", pagamento.getIdTransacao(), e);
+            // Não propaga exception para não impactar fluxo principal
+        }
     }
 }

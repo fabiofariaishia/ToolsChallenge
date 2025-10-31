@@ -5,7 +5,10 @@ import br.com.sicredi.toolschallenge.estorno.domain.StatusEstorno;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoRequestDTO;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoResponseDTO;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoMapper;
+import br.com.sicredi.toolschallenge.estorno.events.EstornoCriadoEvento;
+import br.com.sicredi.toolschallenge.estorno.events.EstornoStatusAlteradoEvento;
 import br.com.sicredi.toolschallenge.estorno.repository.EstornoRepository;
+import br.com.sicredi.toolschallenge.infra.outbox.publisher.EventoPublisher;
 import br.com.sicredi.toolschallenge.pagamento.domain.Pagamento;
 import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
 import br.com.sicredi.toolschallenge.pagamento.repository.PagamentoRepository;
@@ -41,6 +44,7 @@ public class EstornoService {
     private final EstornoRepository repository;
     private final PagamentoRepository pagamentoRepository;
     private final EstornoMapper mapper;
+    private final EventoPublisher eventoPublisher;
     private final Random random = new Random();
 
     /**
@@ -120,11 +124,20 @@ public class EstornoService {
         estorno = repository.save(estorno);
         log.info("Estorno criado com ID: {}, Status: PENDENTE", estorno.getIdEstorno());
 
+        // Publicar evento: Estorno Criado
+        publicarEventoEstornoCriado(estorno, pagamento);
+
         // 7. Simular processamento do estorno
+        StatusEstorno statusAnterior = estorno.getStatus();
         simularProcessamentoEstorno(estorno);
 
         // Salvar com novo status
         estorno = repository.save(estorno);
+
+        // Publicar evento: Status Alterado (se mudou)
+        if (!statusAnterior.equals(estorno.getStatus())) {
+            publicarEventoStatusAlterado(estorno, pagamento, statusAnterior);
+        }
 
         log.info("Estorno {} finalizado - Status: {}", 
             estorno.getIdEstorno(), estorno.getStatus());
@@ -254,5 +267,58 @@ public class EstornoService {
         long timestamp = System.currentTimeMillis() % 100000000L;
         long randomPart = random.nextInt(10000000);
         return (timestamp * 10000000L) + randomPart;
+    }
+
+    /**
+     * Publica evento de estorno criado no outbox.
+     * 
+     * @param estorno Estorno criado
+     * @param pagamento Pagamento relacionado
+     */
+    private void publicarEventoEstornoCriado(Estorno estorno, Pagamento pagamento) {
+        try {
+            EstornoCriadoEvento evento = EstornoCriadoEvento.builder()
+                    .idEstorno(estorno.getId())
+                    .idPagamento(pagamento.getId())
+                    .idTransacao(estorno.getIdEstorno())
+                    .valorEstorno(estorno.getValor())
+                    .motivo(estorno.getMotivo())
+                    .status(estorno.getStatus().name())
+                    .criadoEm(estorno.getDataHora())
+                    .build();
+
+            eventoPublisher.publicarEstornoCriado(evento);
+            
+        } catch (Exception e) {
+            log.error("Erro ao publicar evento de estorno criado: {}", estorno.getIdEstorno(), e);
+            // Não propaga exception para não impactar fluxo principal
+        }
+    }
+
+    /**
+     * Publica evento de status alterado no outbox.
+     * 
+     * @param estorno Estorno atualizado
+     * @param pagamento Pagamento relacionado
+     * @param statusAnterior Status anterior
+     */
+    private void publicarEventoStatusAlterado(Estorno estorno, Pagamento pagamento, StatusEstorno statusAnterior) {
+        try {
+            EstornoStatusAlteradoEvento evento = EstornoStatusAlteradoEvento.builder()
+                    .idEstorno(estorno.getId())
+                    .idPagamento(pagamento.getId())
+                    .idTransacao(estorno.getIdEstorno())
+                    .statusAnterior(statusAnterior.name())
+                    .statusNovo(estorno.getStatus().name())
+                    .alteradoEm(OffsetDateTime.now())
+                    .motivo("Processamento de estorno")
+                    .build();
+
+            eventoPublisher.publicarEstornoStatusAlterado(evento);
+            
+        } catch (Exception e) {
+            log.error("Erro ao publicar evento de status alterado: {}", estorno.getIdEstorno(), e);
+            // Não propaga exception para não impactar fluxo principal
+        }
     }
 }
