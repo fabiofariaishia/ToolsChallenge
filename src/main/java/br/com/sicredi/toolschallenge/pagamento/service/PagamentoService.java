@@ -12,6 +12,7 @@ import br.com.sicredi.toolschallenge.infra.outbox.publisher.EventoPublisher;
 import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,7 @@ public class PagamentoService {
     private final PagamentoRepository repository;
     private final PagamentoMapper mapper;
     private final EventoPublisher eventoPublisher;
+    private final ApplicationEventPublisher eventPublisher;
     private final Random random = new Random();
 
     /**
@@ -228,7 +230,11 @@ public class PagamentoService {
                     .criadoEm(pagamento.getDataHora())
                     .build();
 
+            // Publicar para Outbox (Kafka)
             eventoPublisher.publicarPagamentoCriado(evento);
+            
+            // Publicar para Auditoria (Event Listener)
+            eventPublisher.publishEvent(evento);
             
         } catch (Exception e) {
             log.error("Erro ao publicar evento de pagamento criado: {}", pagamento.getIdTransacao(), e);
@@ -253,7 +259,11 @@ public class PagamentoService {
                     .motivo("Autorização processada")
                     .build();
 
+            // Publicar para Outbox (Kafka)
             eventoPublisher.publicarPagamentoStatusAlterado(evento);
+            
+            // Publicar para Auditoria (Event Listener)
+            eventPublisher.publishEvent(evento);
             
         } catch (Exception e) {
             log.error("Erro ao publicar evento de status alterado: {}", pagamento.getIdTransacao(), e);

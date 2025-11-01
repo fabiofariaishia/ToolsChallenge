@@ -16,6 +16,7 @@ import br.com.sicredi.toolschallenge.shared.exception.NegocioException;
 import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,6 +46,7 @@ public class EstornoService {
     private final PagamentoRepository pagamentoRepository;
     private final EstornoMapper mapper;
     private final EventoPublisher eventoPublisher;
+    private final ApplicationEventPublisher eventPublisher;
     private final Random random = new Random();
 
     /**
@@ -287,7 +289,11 @@ public class EstornoService {
                     .criadoEm(estorno.getDataHora())
                     .build();
 
+            // Publicar para Outbox (Kafka)
             eventoPublisher.publicarEstornoCriado(evento);
+            
+            // Publicar para Auditoria (Event Listener)
+            eventPublisher.publishEvent(evento);
             
         } catch (Exception e) {
             log.error("Erro ao publicar evento de estorno criado: {}", estorno.getIdEstorno(), e);
@@ -314,7 +320,11 @@ public class EstornoService {
                     .motivo("Processamento de estorno")
                     .build();
 
+            // Publicar para Outbox (Kafka)
             eventoPublisher.publicarEstornoStatusAlterado(evento);
+            
+            // Publicar para Auditoria (Event Listener)
+            eventPublisher.publishEvent(evento);
             
         } catch (Exception e) {
             log.error("Erro ao publicar evento de status alterado: {}", estorno.getIdEstorno(), e);

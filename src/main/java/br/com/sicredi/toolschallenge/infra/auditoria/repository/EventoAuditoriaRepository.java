@@ -2,6 +2,7 @@ package br.com.sicredi.toolschallenge.infra.auditoria.repository;
 
 import br.com.sicredi.toolschallenge.infra.auditoria.EventoAuditoria;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -22,120 +23,51 @@ import java.util.List;
 public interface EventoAuditoriaRepository extends JpaRepository<EventoAuditoria, Long> {
     
     /**
-     * Busca todos os eventos de auditoria de um agregado específico.
-     * Ordenados cronologicamente (mais antigos primeiro).
-     * 
-     * @param agregadoId ID do agregado (ex: idTransacao do pagamento)
-     * @return Lista de eventos do agregado
+     * Busca eventos por tipo de agregado e ID ordenados por data (mais recentes primeiro)
      */
-    @Query("SELECT e FROM EventoAuditoria e WHERE e.agregadoId = :agregadoId ORDER BY e.criadoEm ASC")
-    List<EventoAuditoria> findByAgregadoId(@Param("agregadoId") String agregadoId);
-    
+    List<EventoAuditoria> findByAgregadoTipoAndAgregadoIdOrderByCriadoEmDesc(
+            String agregadoTipo, 
+            String agregadoId
+    );
+
     /**
-     * Busca eventos de auditoria por tipo.
-     * 
-     * @param eventoTipo Tipo do evento (ex: "PagamentoAutorizado", "EstornoCancelado")
-     * @return Lista de eventos do tipo especificado
+     * Busca eventos por tipo de agregado
      */
-    @Query("SELECT e FROM EventoAuditoria e WHERE e.eventoTipo = :eventoTipo")
-    List<EventoAuditoria> findByEventoTipo(@Param("eventoTipo") String eventoTipo);
-    
+    List<EventoAuditoria> findByAgregadoTipoOrderByCriadoEmDesc(String agregadoTipo);
+
     /**
-     * Busca eventos por tipo ordenados por data (mais recentes primeiro).
-     * 
-     * @param eventoTipo Tipo do evento
-     * @return Lista ordenada de eventos
+     * Busca eventos por tipo de evento
      */
-    @Query("SELECT e FROM EventoAuditoria e WHERE e.eventoTipo = :eventoTipo ORDER BY e.criadoEm DESC")
-    List<EventoAuditoria> findByEventoTipoOrderByCriadoEmDesc(@Param("eventoTipo") String eventoTipo);
-    
-    /**
-     * Busca eventos de auditoria em um período.
-     * 
-     * @param dataInicio Data/hora de início
-     * @param dataFim Data/hora de fim
-     * @return Lista de eventos no período
+    List<EventoAuditoria> findByEventoTipoOrderByCriadoEmDesc(String eventoTipo);    /**
+     * Busca eventos em um período
      */
     @Query("SELECT e FROM EventoAuditoria e WHERE e.criadoEm BETWEEN :dataInicio AND :dataFim ORDER BY e.criadoEm DESC")
     List<EventoAuditoria> findByPeriodo(
-        @Param("dataInicio") OffsetDateTime dataInicio,
-        @Param("dataFim") OffsetDateTime dataFim
+            @Param("dataInicio") OffsetDateTime dataInicio,
+            @Param("dataFim") OffsetDateTime dataFim
     );
-    
+
     /**
-     * Busca eventos de um agregado em um período.
-     * Útil para análise temporal de um pagamento específico.
-     * 
-     * @param agregadoId ID do agregado
-     * @param dataInicio Data/hora de início
-     * @param dataFim Data/hora de fim
-     * @return Lista de eventos do agregado no período
+     * Busca eventos por origem
      */
-    @Query("SELECT e FROM EventoAuditoria e WHERE e.agregadoId = :agregadoId AND e.criadoEm BETWEEN :dataInicio AND :dataFim ORDER BY e.criadoEm ASC")
-    List<EventoAuditoria> findByAgregadoIdAndPeriodo(
-        @Param("agregadoId") String agregadoId,
-        @Param("dataInicio") OffsetDateTime dataInicio,
-        @Param("dataFim") OffsetDateTime dataFim
-    );
-    
+    List<EventoAuditoria> findByUsuarioOrderByCriadoEmDesc(String usuario);
+
     /**
-     * Busca eventos por tipo e agregado.
-     * 
-     * @param eventoTipo Tipo do evento
-     * @param agregadoId ID do agregado
-     * @return Lista de eventos
+     * Conta eventos por tipo de agregado
      */
-    @Query("SELECT e FROM EventoAuditoria e WHERE e.eventoTipo = :eventoTipo AND e.agregadoId = :agregadoId ORDER BY e.criadoEm ASC")
-    List<EventoAuditoria> findByEventoTipoAndAgregadoId(
-        @Param("eventoTipo") String eventoTipo,
-        @Param("agregadoId") String agregadoId
-    );
-    
+    @Query("SELECT COUNT(e) FROM EventoAuditoria e WHERE e.agregadoTipo = :agregadoTipo")
+    Long countByAgregadoTipo(@Param("agregadoTipo") String agregadoTipo);
+
     /**
-     * Busca os últimos N eventos (para monitoramento em tempo real).
-     * 
-     * @param limit Quantidade de eventos
-     * @return Lista dos eventos mais recentes
+     * Busca últimos eventos
      */
-    @Query("SELECT e FROM EventoAuditoria e ORDER BY e.criadoEm DESC LIMIT :limit")
-    List<EventoAuditoria> findUltimosEventos(@Param("limit") int limit);
-    
+    @Query("SELECT e FROM EventoAuditoria e ORDER BY e.criadoEm DESC")
+    List<EventoAuditoria> findUltimosEventos(org.springframework.data.domain.Pageable pageable);
+
     /**
-     * Conta eventos por tipo em um período.
-     * Útil para dashboards e métricas de compliance.
-     * 
-     * @param eventoTipo Tipo do evento
-     * @param dataInicio Data/hora de início
-     * @param dataFim Data/hora de fim
-     * @return Quantidade de eventos
+     * Remove eventos antigos (para limpeza periódica)
      */
-    @Query("SELECT COUNT(e) FROM EventoAuditoria e WHERE e.eventoTipo = :eventoTipo AND e.criadoEm BETWEEN :dataInicio AND :dataFim")
-    Long countByEventoTipoAndPeriodo(
-        @Param("eventoTipo") String eventoTipo,
-        @Param("dataInicio") OffsetDateTime dataInicio,
-        @Param("dataFim") OffsetDateTime dataFim
-    );
-    
-    /**
-     * Busca eventos por tipo de agregado (ex: todos eventos de pagamentos).
-     * 
-     * @param agregadoTipo Tipo do agregado (ex: "Pagamento", "Estorno")
-     * @return Lista de eventos
-     */
-    @Query("SELECT e FROM EventoAuditoria e WHERE e.agregadoTipo = :agregadoTipo")
-    List<EventoAuditoria> findByAgregadoTipo(@Param("agregadoTipo") String agregadoTipo);
-    
-    /**
-     * Busca eventos de um agregado específico ordenados cronologicamente.
-     * Retorna histórico completo para event sourcing/auditoria.
-     * 
-     * @param agregadoTipo Tipo do agregado
-     * @param agregadoId ID do agregado
-     * @return Lista ordenada de eventos (história completa do agregado)
-     */
-    @Query("SELECT e FROM EventoAuditoria e WHERE e.agregadoTipo = :agregadoTipo AND e.agregadoId = :agregadoId ORDER BY e.criadoEm ASC")
-    List<EventoAuditoria> findHistoricoCompleto(
-        @Param("agregadoTipo") String agregadoTipo,
-        @Param("agregadoId") String agregadoId
-    );
+    @Modifying
+    @Query("DELETE FROM EventoAuditoria e WHERE e.criadoEm < :dataLimite")
+    void deleteEventosAntigos(@Param("dataLimite") OffsetDateTime dataLimite);
 }
