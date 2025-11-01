@@ -16,6 +16,9 @@ import br.com.sicredi.toolschallenge.shared.exception.NegocioException;
 import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,16 +28,23 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
  * Service para operações de negócio de Estorno.
  * 
  * Responsabilidades:
- * - Criar solicitação de estorno
+ * - Criar solicitação de estorno com lock distribuído (Redisson)
  * - Validar regras de negócio (pagamento autorizado, prazo 24h, valor correto)
  * - Simular processamento de estorno
  * - Consultar estornos
+ * 
+ * Lock Distribuído:
+ * - Previne race conditions em estornos concorrentes
+ * - Chave: "lock:estorno:{idTransacao}"
+ * - Timeout: 5 segundos (waitTime)
+ * - Lease: 30 segundos (renovado automaticamente pelo watchdog)
  */
 @Service
 @Slf4j
@@ -48,103 +58,149 @@ public class EstornoService {
     private final EventoPublisher eventoPublisher;
     private final ApplicationEventPublisher eventPublisher;
     private final Random random = new Random();
+    
+    @Autowired(required = false)
+    private RedissonClient redissonClient;
 
     /**
-     * Cria uma nova solicitação de estorno.
+     * Cria uma nova solicitação de estorno com lock distribuído.
      * 
-     * Validações:
+     * Lock Distribuído (Redisson):
+     * - Chave: "lock:estorno:{idTransacao}"
+     * - WaitTime: 5 segundos (quanto tempo espera para adquirir)
+     * - LeaseTime: 30 segundos (quanto tempo mantém, renovado por watchdog)
+     * - Previne race conditions em requisições concorrentes
+     * 
+     * Validações (executadas DENTRO do lock):
      * 1. Pagamento existe
      * 2. Pagamento está AUTORIZADO
      * 3. Valor do estorno = valor do pagamento (estorno parcial não permitido)
      * 4. Dentro da janela de 24 horas
-     * 5. Não existe estorno CANCELADO para este pagamento (constraint no banco)
+     * 5. Não existe estorno CANCELADO para este pagamento
      * 
      * @param request DTO com dados do estorno
      * @return DTO de resposta com status do estorno
+     * @throws NegocioException se validações falharem ou timeout ao adquirir lock
      */
     @Transactional
     public EstornoResponseDTO criarEstorno(EstornoRequestDTO request) {
-        log.info("Criando estorno para transação: {}", request.getIdTransacao());
+        String idTransacao = request.getIdTransacao();
+        log.info("Criando estorno para transação: {}", idTransacao);
+        
+        // Criar lock distribuído para este pagamento (se disponível)
+        RLock lock = redissonClient != null ? redissonClient.getLock("lock:estorno:" + idTransacao) : null;
+        
+        try {
+            // Tentar adquirir lock (se disponível)
+            if (lock != null) {
+                boolean adquirido = lock.tryLock(5, 30, TimeUnit.SECONDS);
+                
+                if (!adquirido) {
+                    log.warn("Timeout ao adquirir lock para estorno: {}", idTransacao);
+                    throw new NegocioException(
+                        "Sistema ocupado processando este pagamento. Tente novamente em instantes."
+                    );
+                }
+                
+                log.debug("Lock adquirido para estorno: {}", idTransacao);
+            } else {
+                log.warn("Lock distribuído NÃO disponível - Race conditions possíveis!");
+            }
+            
+            // TODAS as validações DENTRO do lock para prevenir race conditions
+            
+            // 1. Buscar pagamento original
+            Pagamento pagamento = pagamentoRepository.findByIdTransacao(idTransacao)
+                .orElseThrow(() -> {
+                    log.warn("Pagamento não encontrado: {}", idTransacao);
+                    return new RecursoNaoEncontradoException("Pagamento", idTransacao);
+                });
 
-        // 1. Buscar pagamento original
-        Pagamento pagamento = pagamentoRepository.findByIdTransacao(request.getIdTransacao())
-            .orElseThrow(() -> {
-                log.warn("Pagamento não encontrado: {}", request.getIdTransacao());
-                return new RecursoNaoEncontradoException("Pagamento", request.getIdTransacao());
-            });
+            // 2. Validar se pagamento está AUTORIZADO
+            if (pagamento.getStatus() != StatusPagamento.AUTORIZADO) {
+                log.warn("Tentativa de estornar pagamento com status {}: {}", 
+                    pagamento.getStatus(), idTransacao);
+                throw new NegocioException(
+                    "Apenas pagamentos AUTORIZADOS podem ser estornados. Status atual: " + pagamento.getStatus()
+                );
+            }
 
-        // 2. Validar se pagamento está AUTORIZADO
-        if (pagamento.getStatus() != StatusPagamento.AUTORIZADO) {
-            log.warn("Tentativa de estornar pagamento com status {}: {}", 
-                pagamento.getStatus(), request.getIdTransacao());
+            // 3. Validar valor (deve ser estorno total)
+            if (request.getValor().compareTo(pagamento.getValor()) != 0) {
+                log.warn("Valor de estorno (R$ {}) diferente do valor do pagamento (R$ {})", 
+                    request.getValor(), pagamento.getValor());
+                throw new NegocioException(
+                    String.format("Estorno parcial não permitido. Valor do pagamento: R$ %.2f", 
+                        pagamento.getValor())
+                );
+            }
+
+            // 4. Validar janela de 24 horas
+            OffsetDateTime agora = OffsetDateTime.now();
+            Duration tempoDecorrido = Duration.between(pagamento.getDataHora(), agora);
+            if (tempoDecorrido.toHours() > 24) {
+                log.warn("Estorno solicitado após 24h. Pagamento: {}, Horas decorridas: {}", 
+                    idTransacao, tempoDecorrido.toHours());
+                throw new NegocioException(
+                    "Estorno só pode ser solicitado dentro de 24 horas. Tempo decorrido: " + 
+                    tempoDecorrido.toHours() + " horas"
+                );
+            }
+
+            // 5. Verificar se já existe estorno CANCELADO para este pagamento
+            boolean existeEstornoCancelado = repository.existsEstornoCanceladoByIdTransacaoPagamento(idTransacao);
+            if (existeEstornoCancelado) {
+                log.warn("Já existe estorno CANCELADO para o pagamento: {}", idTransacao);
+                throw new NegocioException(
+                    "Já existe um estorno processado para este pagamento"
+                );
+            }
+
+            // 6. Criar estorno
+            Estorno estorno = mapper.paraEntidade(request);
+            estorno.setIdEstorno(UUID.randomUUID().toString());
+            estorno.setDataHora(agora);
+            estorno.setStatus(StatusEstorno.PENDENTE);
+            estorno.setSnowflakeId(gerarSnowflakeId());
+
+            // Salvar como PENDENTE
+            estorno = repository.save(estorno);
+            log.info("Estorno criado com ID: {}, Status: PENDENTE", estorno.getIdEstorno());
+
+            // Publicar evento: Estorno Criado
+            publicarEventoEstornoCriado(estorno, pagamento);
+
+            // 7. Simular processamento do estorno
+            StatusEstorno statusAnterior = estorno.getStatus();
+            simularProcessamentoEstorno(estorno);
+
+            // Salvar com novo status
+            estorno = repository.save(estorno);
+
+            // Publicar evento: Status Alterado (se mudou)
+            if (!statusAnterior.equals(estorno.getStatus())) {
+                publicarEventoStatusAlterado(estorno, pagamento, statusAnterior);
+            }
+
+            log.info("Estorno {} finalizado - Status: {}", 
+                estorno.getIdEstorno(), estorno.getStatus());
+
+            return mapper.paraDTO(estorno);
+            
+        } catch (InterruptedException e) {
+            // Restaurar flag de interrupção da thread
+            Thread.currentThread().interrupt();
+            log.error("Thread interrompida ao processar estorno: {}", idTransacao, e);
             throw new NegocioException(
-                "Apenas pagamentos AUTORIZADOS podem ser estornados. Status atual: " + pagamento.getStatus()
+                "Processamento do estorno foi interrompido. Tente novamente."
             );
+        } finally {
+            // Liberar lock SEMPRE (se esta thread o possui e lock está disponível)
+            if (lock != null && lock.isHeldByCurrentThread()) {
+                lock.unlock();
+                log.debug("Lock liberado para estorno: {}", idTransacao);
+            }
         }
-
-        // 3. Validar valor (deve ser estorno total)
-        if (request.getValor().compareTo(pagamento.getValor()) != 0) {
-            log.warn("Valor de estorno (R$ {}) diferente do valor do pagamento (R$ {})", 
-                request.getValor(), pagamento.getValor());
-            throw new NegocioException(
-                String.format("Estorno parcial não permitido. Valor do pagamento: R$ %.2f", 
-                    pagamento.getValor())
-            );
-        }
-
-        // 4. Validar janela de 24 horas
-        OffsetDateTime agora = OffsetDateTime.now();
-        Duration tempoDecorrido = Duration.between(pagamento.getDataHora(), agora);
-        if (tempoDecorrido.toHours() > 24) {
-            log.warn("Estorno solicitado após 24h. Pagamento: {}, Horas decorridas: {}", 
-                request.getIdTransacao(), tempoDecorrido.toHours());
-            throw new NegocioException(
-                "Estorno só pode ser solicitado dentro de 24 horas. Tempo decorrido: " + 
-                tempoDecorrido.toHours() + " horas"
-            );
-        }
-
-        // 5. Verificar se já existe estorno CANCELADO para este pagamento
-        boolean existeEstornoCancelado = repository.existsEstornoCanceladoByIdTransacaoPagamento(
-            request.getIdTransacao()
-        );
-        if (existeEstornoCancelado) {
-            log.warn("Já existe estorno CANCELADO para o pagamento: {}", request.getIdTransacao());
-            throw new NegocioException(
-                "Já existe um estorno processado para este pagamento"
-            );
-        }
-
-        // 6. Criar estorno
-        Estorno estorno = mapper.paraEntidade(request);
-        estorno.setIdEstorno(UUID.randomUUID().toString());
-        estorno.setDataHora(agora);
-        estorno.setStatus(StatusEstorno.PENDENTE);
-        estorno.setSnowflakeId(gerarSnowflakeId());
-
-        // Salvar como PENDENTE
-        estorno = repository.save(estorno);
-        log.info("Estorno criado com ID: {}, Status: PENDENTE", estorno.getIdEstorno());
-
-        // Publicar evento: Estorno Criado
-        publicarEventoEstornoCriado(estorno, pagamento);
-
-        // 7. Simular processamento do estorno
-        StatusEstorno statusAnterior = estorno.getStatus();
-        simularProcessamentoEstorno(estorno);
-
-        // Salvar com novo status
-        estorno = repository.save(estorno);
-
-        // Publicar evento: Status Alterado (se mudou)
-        if (!statusAnterior.equals(estorno.getStatus())) {
-            publicarEventoStatusAlterado(estorno, pagamento, statusAnterior);
-        }
-
-        log.info("Estorno {} finalizado - Status: {}", 
-            estorno.getIdEstorno(), estorno.getStatus());
-
-        return mapper.paraDTO(estorno);
     }
 
     /**
