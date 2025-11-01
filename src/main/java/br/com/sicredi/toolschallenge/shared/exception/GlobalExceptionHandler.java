@@ -1,5 +1,6 @@
 package br.com.sicredi.toolschallenge.shared.exception;
 
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -7,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -14,8 +16,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Tratamento global de exceções para a API
@@ -225,6 +229,65 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 request.getRequestURI()
         );
+        resposta.setTraceId(traceId);
+        
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resposta);
+    }
+    
+    /**
+     * Trata erros de deserialização JSON (incluindo enums inválidos)
+     * Retorna 400 Bad Request
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErroResposta> tratarErroDesserializacao(
+            HttpMessageNotReadableException ex,
+            HttpServletRequest request) {
+        
+        String traceId = gerarTraceId();
+        logger.warn("[{}] Erro de deserialização JSON na requisição: {}", 
+                traceId, request.getRequestURI());
+        
+        String mensagem = "JSON mal formatado ou inválido";
+        List<ErroResposta.CampoErro> errosValidacao = new ArrayList<>();
+        
+        // Tratamento especial para InvalidFormatException (enums inválidos)
+        Throwable cause = ex.getCause();
+        if (cause instanceof InvalidFormatException) {
+            InvalidFormatException ife = (InvalidFormatException) cause;
+            
+            // Se for erro de enum
+            if (ife.getTargetType() != null && ife.getTargetType().isEnum()) {
+                String fieldName = ife.getPath().get(0).getFieldName();
+                String invalidValue = ife.getValue().toString();
+                String validValues = Arrays.stream(ife.getTargetType().getEnumConstants())
+                        .map(Object::toString)
+                        .collect(Collectors.joining(", "));
+                
+                mensagem = String.format(
+                    "Valor '%s' inválido para o campo '%s'. Valores aceitos: %s",
+                    invalidValue, fieldName, validValues
+                );
+                
+                errosValidacao.add(new ErroResposta.CampoErro(
+                    fieldName,
+                    invalidValue,
+                    String.format("Valor '%s' não é válido. Use: %s", invalidValue, validValues)
+                ));
+                
+                logger.warn("[{}] Enum inválido: campo={}, valor={}, valores aceitos={}", 
+                        traceId, fieldName, invalidValue, validValues);
+            }
+        }
+        
+        ErroResposta resposta = new ErroResposta(
+                HttpStatus.BAD_REQUEST.value(),
+                HttpStatus.BAD_REQUEST.getReasonPhrase(),
+                mensagem,
+                request.getRequestURI()
+        );
+        if (!errosValidacao.isEmpty()) {
+            resposta.setErrosValidacao(errosValidacao);
+        }
         resposta.setTraceId(traceId);
         
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(resposta);

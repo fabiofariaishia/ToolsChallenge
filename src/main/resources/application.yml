@@ -84,6 +84,8 @@ logging:
     root: INFO
     br.com.sicredi.toolschallenge: DEBUG
     org.springframework.web: INFO
+    org.springframework.kafka: WARN
+    org.apache.kafka: WARN
     org.hibernate: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
