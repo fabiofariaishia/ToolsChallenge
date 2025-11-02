@@ -490,7 +490,7 @@ Ao criar um novo módulo (ex: `notificacao/`, `relatorio/`), siga este checklist
 
 ---
 
-## 🎖️ **As 10 Regras de Ouro**
+## 🎖️ **As 11 Regras de Ouro**
 
 *(Repetição das Regras Fundamentais para ênfase)*
 
@@ -504,6 +504,135 @@ Ao criar um novo módulo (ex: `notificacao/`, `relatorio/`), siga este checklist
 8. ✅ Validações de entrada no DTO com Bean Validation
 9. ✅ Timestamps automáticos com @PrePersist/@PreUpdate
 10. ✅ Exceções de negócio devem estender NegocioException ou RecursoNaoEncontradoException
+11. 🧪 **SEMPRE criar teste unitário junto com Service/método - Red-Green-Refactor obrigatório**
+
+---
+
+## 🧪 **Regra #11 DETALHADA: Test-Driven Development Obrigatório**
+
+### **⚠️ WORKFLOW OBRIGATÓRIO ao criar/modificar Services**
+
+Esta é uma das regras mais críticas do projeto. **NUNCA** pode ser violada.
+
+#### **Ao CRIAR um novo Service ou método em Service:**
+
+1. 🔴 **RED - Criar teste que FALHA**
+   ```java
+   @Test
+   void deveProcessarPagamentoComSucesso() {
+       // Arrange - preparar dados
+       PagamentoRequestDTO request = ...;
+       when(repository.save(any())).thenReturn(pagamento);
+       
+       // Act - executar método
+       PagamentoResponseDTO response = service.criar(request);
+       
+       // Assert - verificar resultado
+       assertNotNull(response);
+       assertEquals("PROCESSADO", response.getStatus());
+   }
+   ```
+   
+2. ▶️ **Executar teste** → Deve FALHAR (método ainda não existe)
+   ```bash
+   mvn test -Dtest=PagamentoServiceTest
+   # DEVE mostrar erro: "método criar() não encontrado"
+   ```
+
+3. 🟢 **GREEN - Implementar código mínimo**
+   ```java
+   @Service
+   public class PagamentoService {
+       public PagamentoResponseDTO criar(PagamentoRequestDTO dto) {
+           // Implementação mínima para passar no teste
+       }
+   }
+   ```
+
+4. ▶️ **Executar teste novamente** → Deve PASSAR
+   ```bash
+   mvn test -Dtest=PagamentoServiceTest
+   # DEVE mostrar: "Tests run: 1, Failures: 0, Errors: 0"
+   ```
+
+5. 🔵 **REFACTOR - Melhorar código** (se necessário)
+   - Refatorar mantendo testes passando
+   - Executar testes após cada mudança
+
+#### **Ao MODIFICAR um método existente em Service:**
+
+1. ▶️ **ANTES de modificar**: Executar TODOS os testes da classe
+   ```bash
+   mvn test -Dtest=PagamentoServiceTest
+   # Garantir que TODOS estão passando
+   ```
+
+2. 🔴 **Adicionar teste para novo comportamento** (se necessário)
+   - Criar teste que falha com a mudança esperada
+
+3. 🟢 **Implementar modificação**
+   - Alterar código do método
+
+4. ▶️ **APÓS modificar**: Executar TODOS os testes da classe novamente
+   ```bash
+   mvn test -Dtest=PagamentoServiceTest
+   # Garantir que TODOS ainda estão passando
+   ```
+
+#### **Ao FINALIZAR implementação de um item da TODO:**
+
+1. ▶️ **Executar aplicação Spring Boot COMPLETA**
+   ```bash
+   mvn spring-boot:run
+   # SEM pular testes! Deixar rodar todos os testes
+   ```
+
+2. 📊 **Analisar logs de startup**
+   - Verificar zero erros
+   - Verificar zero warnings críticos
+   - Verificar que todos os beans foram criados
+   - Verificar que scheduler iniciou (se aplicável)
+   - Verificar conexões com PostgreSQL, Redis, Kafka
+
+3. ✅ **Validar testes passaram**
+   ```
+   [INFO] Tests run: X, Failures: 0, Errors: 0, Skipped: 0
+   [INFO] BUILD SUCCESS
+   ```
+
+4. 📝 **Analisar logs da aplicação rodando**
+   - Deixar rodar por pelo menos 1 minuto
+   - Verificar se scheduler executou (se aplicável)
+   - Verificar se não há exceptions em background
+   - Verificar métricas de Circuit Breaker
+
+### **❌ PROIBIÇÕES ABSOLUTAS:**
+
+- ❌ **NUNCA** criar Service sem teste unitário correspondente
+- ❌ **NUNCA** criar método em Service sem teste unitário
+- ❌ **NUNCA** modificar método sem executar todos os testes da classe
+- ❌ **NUNCA** dar item como completo sem rodar `mvn spring-boot:run` e analisar logs
+- ❌ **NUNCA** usar `mvn spring-boot:run -DskipTests` ao finalizar item
+
+### **✅ OBRIGAÇÕES ABSOLUTAS:**
+
+- ✅ **SEMPRE** seguir Red-Green-Refactor
+- ✅ **SEMPRE** criar teste ANTES da implementação (TDD clássico)
+- ✅ **SEMPRE** executar teste e ver falhar ANTES de implementar
+- ✅ **SEMPRE** executar TODOS os testes da classe após modificação
+- ✅ **SEMPRE** rodar aplicação completa ao finalizar item
+- ✅ **SEMPRE** analisar logs de startup e execução
+
+### **📋 Checklist de Criação de Service/Método:**
+
+- [ ] 🔴 Teste criado e executado → FALHOU ✅
+- [ ] 🟢 Código implementado
+- [ ] ▶️ Teste executado → PASSOU ✅
+- [ ] 🔵 Código refatorado (se necessário)
+- [ ] ▶️ TODOS os testes da classe executados → PASSARAM ✅
+- [ ] ▶️ `mvn spring-boot:run` executado (sem skip tests)
+- [ ] 📊 Logs analisados → Zero erros ✅
+- [ ] 📊 Aplicação rodou por 1+ minuto → Sem exceptions ✅
 
 ---
 
