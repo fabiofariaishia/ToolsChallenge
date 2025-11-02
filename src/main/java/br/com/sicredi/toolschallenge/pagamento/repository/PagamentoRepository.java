@@ -96,6 +96,23 @@ public interface PagamentoRepository extends JpaRepository<Pagamento, Long> {
     Optional<Pagamento> findPagamentoAutorizadoByIdTransacao(@Param("idTransacao") String idTransacao);
     
     /**
+     * Busca pagamentos pendentes para reprocessamento.
+     * 
+     * <p>Retorna pagamentos que ficaram no status PENDENTE devido a:
+     * <ul>
+     *   <li>Circuit Breaker aberto (adquirente indisponível)</li>
+     *   <li>Falhas temporárias na comunicação com adquirente</li>
+     *   <li>Timeouts durante autorização</li>
+     * </ul>
+     * 
+     * <p>Ordenados por data de criação (mais antigos primeiro) para processamento FIFO.
+     * 
+     * @return Lista de pagamentos pendentes ordenados por criação
+     */
+    @Query("SELECT p FROM Pagamento p WHERE p.status = 'PENDENTE' ORDER BY p.criadoEm ASC")
+    List<Pagamento> findPagamentosPendentes();
+    
+    /**
      * Conta pagamentos por status em um período.
      * Útil para dashboards e métricas.
      * 

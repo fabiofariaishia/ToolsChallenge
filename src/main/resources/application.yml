@@ -124,7 +124,18 @@ adquirente:
     # Taxa de aprovação quando disponível (0.9 = 90% aprovado)
     aprovacao-rate: 0.9
 
-        # OpenAPI/Swagger
+# Configuração de Reprocessamento de Transações Pendentes
+reprocessamento:
+  # Habilita/desabilita o scheduler de reprocessamento
+  enabled: true
+  # Intervalo entre execuções em minutos (padrão: 5 minutos)
+  intervalo-minutos: 5
+  # Número máximo de registros processados por batch (limita carga)
+  batch-size: 50
+  # Número máximo de tentativas antes de enviar para DLQ
+  max-tentativas: 3
+
+# OpenAPI/Swagger
 springdoc:
   api-docs:
     path: /v3/api-docs

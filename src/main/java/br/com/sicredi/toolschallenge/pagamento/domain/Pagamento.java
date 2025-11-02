@@ -136,6 +136,15 @@ public class Pagamento {
     private Long snowflakeId;
 
     /**
+     * Número de tentativas de reprocessamento após status PENDENTE
+     * Contador incrementado a cada tentativa do scheduler
+     * Usado para implementar Dead Letter Queue (DLQ) após max tentativas
+     */
+    @Column(name = "tentativas_reprocessamento", nullable = false)
+    @Builder.Default
+    private Integer tentativasReprocessamento = 0;
+
+    /**
      * Timestamp de criação do registro (auditoria)
      */
     @Column(name = "criado_em", nullable = false, updatable = false, columnDefinition = "TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP")

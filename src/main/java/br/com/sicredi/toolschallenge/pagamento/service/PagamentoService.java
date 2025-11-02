@@ -14,6 +14,7 @@ import br.com.sicredi.toolschallenge.adquirente.service.AdquirenteService;
 import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoRequest;
 import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoResponse;
 import br.com.sicredi.toolschallenge.adquirente.domain.StatusAutorizacao;
+import br.com.sicredi.toolschallenge.shared.config.ReprocessamentoProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -46,6 +47,7 @@ public class PagamentoService {
     private final EventoPublisher eventoPublisher;
     private final ApplicationEventPublisher eventPublisher;
     private final AdquirenteService adquirenteService;
+    private final ReprocessamentoProperties reprocessamentoProperties;
     private final Random random = new Random();
 
     /**
@@ -291,5 +293,108 @@ public class PagamentoService {
             log.error("Erro ao publicar evento de status alterado: {}", pagamento.getIdTransacao(), e);
             // Não propaga exception para não impactar fluxo principal
         }
+    }
+
+    /**
+     * Reprocessa pagamentos que ficaram com status PENDENTE.
+     * 
+     * <p>Busca todos os pagamentos PENDENTE (falha de Circuit Breaker, timeout, etc) 
+     * e tenta reprocessá-los autorizando novamente com o adquirente.
+     * 
+     * <p>Para cada pagamento pendente:
+     * <ul>
+     *   <li>Tenta autorizar com adquirente via AdquirenteService</li>
+     *   <li>Atualiza status baseado na resposta (AUTORIZADO/NEGADO/PENDENTE)</li>
+     *   <li>Atualiza NSU e código de autorização se aprovado</li>
+     *   <li>Publica evento de status alterado</li>
+     *   <li>Log de processamento individual</li>
+     * </ul>
+     * 
+     * <p>Execução em batch transacional. Erros individuais não interrompem o batch.
+     * 
+     * <p>Chamado automaticamente pelo {@link br.com.sicredi.toolschallenge.infra.scheduled.ReprocessamentoScheduler}
+     * a cada 5 minutos.
+     * 
+     * @see br.com.sicredi.toolschallenge.infra.scheduled.ReprocessamentoScheduler#reprocessarPagamentosPendentes()
+     */
+    @Transactional
+    public void reprocessarPagamentosPendentes() {
+        log.info("Iniciando reprocessamento de pagamentos pendentes");
+        
+        int maxTentativas = reprocessamentoProperties.getMaxTentativas();
+        
+        // Buscar todos pagamentos pendentes
+        List<Pagamento> pagamentosPendentes = repository.findPagamentosPendentes();
+        
+        if (pagamentosPendentes.isEmpty()) {
+            log.info("Nenhum pagamento pendente para reprocessar");
+            return;
+        }
+        
+        log.info("Encontrados {} pagamentos pendentes para reprocessar", pagamentosPendentes.size());
+        
+        int sucessos = 0;
+        int falhas = 0;
+        int mantidosPendentes = 0;
+        int enviadosDLQ = 0;
+        
+        // Reprocessar cada pagamento individualmente
+        for (Pagamento pagamento : pagamentosPendentes) {
+            try {
+                // Verificar se atingiu limite de tentativas (DLQ)
+                if (pagamento.getTentativasReprocessamento() >= maxTentativas) {
+                    enviadosDLQ++;
+                    log.warn("Pagamento {} atingiu máximo de tentativas ({}) - ENVIADO PARA DLQ - Requer análise manual",
+                        pagamento.getIdTransacao(), maxTentativas);
+                    continue;
+                }
+                
+                log.info("Reprocessando pagamento: {} (tentativa {}/{})", 
+                    pagamento.getIdTransacao(), 
+                    pagamento.getTentativasReprocessamento() + 1, 
+                    maxTentativas);
+                
+                StatusPagamento statusAnterior = pagamento.getStatus();
+                
+                // Incrementar contador de tentativas
+                pagamento.setTentativasReprocessamento(pagamento.getTentativasReprocessamento() + 1);
+                
+                // Tentar autorizar novamente
+                autorizarComAdquirente(pagamento);
+                
+                // Salvar com novo status
+                repository.save(pagamento);
+                
+                // Publicar evento se status mudou
+                if (!statusAnterior.equals(pagamento.getStatus())) {
+                    publicarEventoStatusAlterado(pagamento, statusAnterior);
+                }
+                
+                // Contabilizar resultado
+                if (pagamento.getStatus() == StatusPagamento.AUTORIZADO) {
+                    sucessos++;
+                    log.info("Pagamento {} reprocessado com SUCESSO - AUTORIZADO (após {} tentativa(s))", 
+                        pagamento.getIdTransacao(), pagamento.getTentativasReprocessamento());
+                } else if (pagamento.getStatus() == StatusPagamento.NEGADO) {
+                    falhas++;
+                    log.warn("Pagamento {} reprocessado - NEGADO pelo adquirente (após {} tentativa(s))", 
+                        pagamento.getIdTransacao(), pagamento.getTentativasReprocessamento());
+                } else {
+                    mantidosPendentes++;
+                    log.warn("Pagamento {} ainda PENDENTE após reprocessamento (tentativa {}/{})", 
+                        pagamento.getIdTransacao(), 
+                        pagamento.getTentativasReprocessamento(), 
+                        maxTentativas);
+                }
+                
+            } catch (Exception e) {
+                mantidosPendentes++;
+                log.error("Erro ao reprocessar pagamento {} - Mantendo PENDENTE: {}", 
+                    pagamento.getIdTransacao(), e.getMessage());
+            }
+        }
+        
+        log.info("Reprocessamento de pagamentos concluído - Total: {}, Sucessos: {}, Falhas: {}, Ainda Pendentes: {}, Enviados para DLQ: {}",
+            pagamentosPendentes.size(), sucessos, falhas, mantidosPendentes, enviadosDLQ);
     }
 }

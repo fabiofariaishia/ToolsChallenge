@@ -15,3 +15,6 @@ spring:
   flyway:
     enabled: false  # Desabilita Flyway em testes (H2 cria schema automaticamente)
 
+# Desabilita scheduler de reprocessamento em testes
+reprocessamento:
+  enabled: false

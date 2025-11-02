@@ -39,13 +39,18 @@ import org.springframework.stereotype.Service;
 public class AdquirenteService {
 
     private final AdquirenteSimuladoService adquirenteSimulado;
-    private final EventoPublisher eventoPublisher;
+    private EventoPublisher eventoPublisher;  // Removido 'final' para permitir @Autowired opcional
 
-    public AdquirenteService(
-        AdquirenteSimuladoService adquirenteSimulado,
-        EventoPublisher eventoPublisher
-    ) {
+    public AdquirenteService(AdquirenteSimuladoService adquirenteSimulado) {
         this.adquirenteSimulado = adquirenteSimulado;
+    }
+    
+    /**
+     * Injeta EventoPublisher de forma opcional.
+     * Pode ser null em ambientes de teste ou quando Kafka está desabilitado.
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setEventoPublisher(EventoPublisher eventoPublisher) {
         this.eventoPublisher = eventoPublisher;
     }
 
@@ -168,17 +173,22 @@ public class AdquirenteService {
                 dados
             );
             
-            // Publicar via método público do EventoPublisher
-            eventoPublisher.publicarEventoGenerico(
-                agregadoId,
-                "Autorizacao",
-                "AUTORIZACAO_REALIZADA",
-                evento,
-                "adquirente.eventos"
-            );
-            
-            log.debug("Evento de autorização publicado: tipo={}, status={}, fallback={}", 
-                tipoOperacao, response.status(), fallbackAtivado);
+            // Publicar evento apenas se EventoPublisher estiver disponível
+            if (eventoPublisher == null) {
+                log.warn("⚠️ EventoPublisher não disponível - evento de autorização não será publicado para Kafka");
+            } else {
+                // Publicar via método público do EventoPublisher
+                eventoPublisher.publicarEventoGenerico(
+                    agregadoId,
+                    "Autorizacao",
+                    "AUTORIZACAO_REALIZADA",
+                    evento,
+                    "adquirente.eventos"
+                );
+                
+                log.debug("Evento de autorização publicado: tipo={}, status={}, fallback={}", 
+                    tipoOperacao, response.status(), fallbackAtivado);
+            }
                 
         } catch (Exception ex) {
             // Não falhar a operação principal se publicação falhar

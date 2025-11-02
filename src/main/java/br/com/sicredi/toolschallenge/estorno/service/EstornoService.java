@@ -18,6 +18,7 @@ import br.com.sicredi.toolschallenge.adquirente.service.AdquirenteService;
 import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoRequest;
 import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoResponse;
 import br.com.sicredi.toolschallenge.adquirente.domain.StatusAutorizacao;
+import br.com.sicredi.toolschallenge.shared.config.ReprocessamentoProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
@@ -62,6 +63,7 @@ public class EstornoService {
     private final EventoPublisher eventoPublisher;
     private final ApplicationEventPublisher eventPublisher;
     private final AdquirenteService adquirenteService;
+    private final ReprocessamentoProperties reprocessamentoProperties;
     private final Random random = new Random();
     
     @Autowired(required = false)
@@ -408,5 +410,109 @@ public class EstornoService {
             log.error("Erro ao publicar evento de status alterado: {}", estorno.getIdEstorno(), e);
             // Não propaga exception para não impactar fluxo principal
         }
+    }
+
+    /**
+     * Reprocessa estornos pendentes.
+     * 
+     * <p>Busca todos os estornos com status PENDENTE (que falharam anteriormente devido a
+     * Circuit Breaker aberto, timeout ou erro temporário) e tenta reprocessá-los com o adquirente.
+     * 
+     * <p>Comportamento:
+     * <ul>
+     *   <li>Verifica se não atingiu maxTentativas (Dead Letter Queue)</li>
+     *   <li>Incrementa contador tentativasReprocessamento</li>
+     *   <li>Busca estornos PENDENTE ordenados por data de criação (FIFO)</li>
+     *   <li>Para cada estorno, tenta processar com adquirente</li>
+     *   <li>Atualiza status baseado na resposta: CANCELADO, NEGADO ou mantém PENDENTE</li>
+     *   <li>Publica eventos de status alterado</li>
+     *   <li>Log de métricas (total, sucessos, falhas, DLQ)</li>
+     * </ul>
+     * 
+     * <p>Transações que atingem maxTentativas param de ser reprocessadas (DLQ).
+     * 
+     * <p>Chamado automaticamente pelo ReprocessamentoScheduler a cada intervalo configurado.
+     * 
+     * @see br.com.sicredi.toolschallenge.infra.scheduled.ReprocessamentoScheduler
+     * @see ReprocessamentoProperties#getMaxTentativas()
+     */
+    @Transactional
+    public void reprocessarEstornosPendentes() {
+        log.info("Iniciando reprocessamento de estornos pendentes");
+        
+        int maxTentativas = reprocessamentoProperties.getMaxTentativas();
+        
+        List<Estorno> estornosPendentes = repository.findEstornosPendentes();
+        
+        if (estornosPendentes.isEmpty()) {
+            log.info("Nenhum estorno pendente para reprocessar");
+            return;
+        }
+        
+        log.info("Encontrados {} estorno(s) pendente(s) para reprocessar", estornosPendentes.size());
+        
+        int sucessos = 0;
+        int falhas = 0;
+        int mantidosPendentes = 0;
+        int enviadosDLQ = 0;
+        
+        for (Estorno estorno : estornosPendentes) {
+            try {
+                // Verificar se atingiu limite de tentativas (DLQ)
+                if (estorno.getTentativasReprocessamento() >= maxTentativas) {
+                    enviadosDLQ++;
+                    log.warn("Estorno {} atingiu máximo de tentativas ({}) - ENVIADO PARA DLQ - Requer análise manual",
+                        estorno.getIdEstorno(), maxTentativas);
+                    continue;
+                }
+                
+                log.debug("Reprocessando estorno: {} (tentativa {}/{})", 
+                    estorno.getIdEstorno(), 
+                    estorno.getTentativasReprocessamento() + 1, 
+                    maxTentativas);
+                
+                StatusEstorno statusAnterior = estorno.getStatus();
+                
+                // Incrementar contador de tentativas
+                estorno.setTentativasReprocessamento(estorno.getTentativasReprocessamento() + 1);
+                
+                // Buscar pagamento original
+                Pagamento pagamento = pagamentoRepository.findByIdTransacao(estorno.getIdTransacao())
+                    .orElseThrow(() -> new RecursoNaoEncontradoException("Pagamento", estorno.getIdTransacao()));
+                
+                // Tentar reprocessar com adquirente
+                processarEstornoComAdquirente(estorno, pagamento);
+                
+                // Salvar novo status
+                repository.save(estorno);
+                
+                // Publicar evento se status mudou
+                if (!statusAnterior.equals(estorno.getStatus())) {
+                    publicarEventoStatusAlterado(estorno, pagamento, statusAnterior);
+                }
+                
+                // Contabilizar resultado
+                if (estorno.getStatus() == StatusEstorno.CANCELADO) {
+                    sucessos++;
+                    log.info("Estorno reprocessado com SUCESSO (CANCELADO após {} tentativa(s)): {}", 
+                        estorno.getTentativasReprocessamento(), estorno.getIdEstorno());
+                } else if (estorno.getStatus() == StatusEstorno.NEGADO) {
+                    falhas++;
+                    log.warn("Estorno reprocessado com FALHA (NEGADO após {} tentativa(s)): {}", 
+                        estorno.getTentativasReprocessamento(), estorno.getIdEstorno());
+                } else if (estorno.getStatus() == StatusEstorno.PENDENTE) {
+                    mantidosPendentes++;
+                    log.warn("Estorno mantido PENDENTE após reprocessamento (tentativa {}/{}): {}", 
+                        estorno.getTentativasReprocessamento(), maxTentativas, estorno.getIdEstorno());
+                }
+                
+            } catch (Exception e) {
+                mantidosPendentes++;
+                log.error("Erro ao reprocessar estorno {}: {}", estorno.getIdEstorno(), e.getMessage(), e);
+            }
+        }
+        
+        log.info("Reprocessamento de estornos concluído - Total: {}, Sucessos: {}, Falhas: {}, Ainda Pendentes: {}, Enviados para DLQ: {}",
+            estornosPendentes.size(), sucessos, falhas, mantidosPendentes, enviadosDLQ);
     }
 }
