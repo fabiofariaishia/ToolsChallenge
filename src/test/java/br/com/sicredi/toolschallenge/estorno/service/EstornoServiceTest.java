@@ -538,4 +538,114 @@ class EstornoServiceTest {
 
         verify(repository).findByStatusOrderByCriadoEmDesc(StatusEstorno.CANCELADO);
     }
+
+    // ==================== TESTES DE REPROCESSAMENTO (ITEM 8) ====================
+
+    @Test
+    @DisplayName("16. Deve reprocessar estorno PENDENTE com sucesso → CANCELADO")
+    void deveReprocessarEstornoPendenteComSucesso() {
+        // Arrange
+        Estorno estornoPendente = new Estorno();
+        estornoPendente.setId(1L);
+        estornoPendente.setIdEstorno("EST-001");
+        estornoPendente.setIdTransacao("TXN-123");
+        estornoPendente.setStatus(StatusEstorno.PENDENTE);
+        estornoPendente.setTentativasReprocessamento(0);
+        estornoPendente.setValor(new BigDecimal("100.00"));
+
+        when(repository.findEstornosPendentes())
+            .thenReturn(Arrays.asList(estornoPendente));
+        when(pagamentoRepository.findByIdTransacao("TXN-123"))
+            .thenReturn(Optional.of(pagamento));
+        when(adquirenteService.processarEstorno(any(AutorizacaoRequest.class)))
+            .thenReturn(autorizacaoAprovada);
+        when(repository.save(any(Estorno.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // Act
+        estornoService.reprocessarEstornosPendentes();
+
+        // Assert
+        verify(repository).findEstornosPendentes();
+        verify(adquirenteService).processarEstorno(any(AutorizacaoRequest.class));
+        verify(repository).save(argThat(e -> 
+            e.getStatus() == StatusEstorno.CANCELADO &&
+            e.getTentativasReprocessamento() == 1
+        ));
+        verify(eventoPublisher).publicarEstornoStatusAlterado(any());
+    }
+
+    @Test
+    @DisplayName("17. Deve reprocessar estorno PENDENTE com falha → PENDENTE (incrementa tentativas)")
+    void deveReprocessarEstornoPendenteComFalha() {
+        // Arrange
+        Estorno estornoPendente = new Estorno();
+        estornoPendente.setId(1L);
+        estornoPendente.setIdEstorno("EST-002");
+        estornoPendente.setIdTransacao("TXN-456");
+        estornoPendente.setStatus(StatusEstorno.PENDENTE);
+        estornoPendente.setTentativasReprocessamento(1); // Já tentou 1x
+        estornoPendente.setValor(new BigDecimal("200.00"));
+
+        when(repository.findEstornosPendentes())
+            .thenReturn(Arrays.asList(estornoPendente));
+        when(pagamentoRepository.findByIdTransacao("TXN-456"))
+            .thenReturn(Optional.of(pagamento));
+        when(adquirenteService.processarEstorno(any(AutorizacaoRequest.class)))
+            .thenReturn(autorizacaoPendente); // Ainda pendente (Circuit Breaker OPEN)
+        when(repository.save(any(Estorno.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // Act
+        estornoService.reprocessarEstornosPendentes();
+
+        // Assert
+        verify(repository).findEstornosPendentes();
+        verify(adquirenteService).processarEstorno(any(AutorizacaoRequest.class));
+        verify(repository).save(argThat(e -> 
+            e.getStatus() == StatusEstorno.PENDENTE &&
+            e.getTentativasReprocessamento() == 2 // Incrementou de 1 para 2
+        ));
+        verify(eventoPublisher, never()).publicarEstornoStatusAlterado(any()); // Status não mudou
+    }
+
+    @Test
+    @DisplayName("18. Não deve reprocessar estorno com max tentativas atingidas (DLQ)")
+    void naoDeveReprocessarEstornoComMaxTentativas() {
+        // Arrange
+        Estorno estornoDLQ = new Estorno();
+        estornoDLQ.setId(1L);
+        estornoDLQ.setIdEstorno("EST-DLQ");
+        estornoDLQ.setIdTransacao("TXN-DLQ");
+        estornoDLQ.setStatus(StatusEstorno.PENDENTE);
+        estornoDLQ.setTentativasReprocessamento(3); // MAX = 3
+        estornoDLQ.setValor(new BigDecimal("50.00"));
+
+        when(repository.findEstornosPendentes())
+            .thenReturn(Arrays.asList(estornoDLQ));
+
+        // Act
+        estornoService.reprocessarEstornosPendentes();
+
+        // Assert
+        verify(repository).findEstornosPendentes();
+        verify(adquirenteService, never()).processarEstorno(any()); // NÃO tentou reprocessar
+        verify(repository, never()).save(any()); // NÃO salvou
+        verify(eventoPublisher, never()).publicarEstornoStatusAlterado(any());
+    }
+
+    @Test
+    @DisplayName("19. Deve retornar sem erro quando batch está vazio")
+    void deveRetornarSemErroQuandoBatchVazio() {
+        // Arrange
+        when(repository.findEstornosPendentes())
+            .thenReturn(Arrays.asList()); // Lista vazia
+
+        // Act
+        estornoService.reprocessarEstornosPendentes();
+
+        // Assert
+        verify(repository).findEstornosPendentes();
+        verify(adquirenteService, never()).processarEstorno(any());
+        verify(repository, never()).save(any());
+        verify(eventoPublisher, never()).publicarEstornoStatusAlterado(any());
+    }
 }
