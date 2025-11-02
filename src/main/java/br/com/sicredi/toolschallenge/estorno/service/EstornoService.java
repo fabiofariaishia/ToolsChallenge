@@ -141,6 +141,11 @@ public class EstornoService {
             }
 
             // 4. Validar janela de 24 horas
+            if (pagamento.getDataHora() == null) {
+                log.error("Pagamento {} sem data/hora válida", idTransacao);
+                throw new NegocioException("Dados de pagamento inválidos - sem data de criação");
+            }
+            
             OffsetDateTime agora = OffsetDateTime.now();
             Duration tempoDecorrido = Duration.between(pagamento.getDataHora(), agora);
             if (tempoDecorrido.toHours() > 24) {
