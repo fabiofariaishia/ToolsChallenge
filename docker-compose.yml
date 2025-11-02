@@ -159,6 +159,46 @@ services:
     networks:
       - toolschallenge-network
 
+  # PostgreSQL Exporter - Métricas de banco de dados
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: toolschallenge-postgres-exporter
+    depends_on:
+      - postgres
+    ports:
+      - "9187:9187"
+    environment:
+      DATA_SOURCE_NAME: "postgresql://postgres:postgres@postgres:5432/pagamentos?sslmode=disable"
+    networks:
+      - toolschallenge-network
+
+  # Redis Exporter - Métricas de cache
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: toolschallenge-redis-exporter
+    depends_on:
+      - redis
+    ports:
+      - "9121:9121"
+    environment:
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: "redis123"
+    networks:
+      - toolschallenge-network
+
+  # Kafka Exporter - Métricas de mensageria
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: toolschallenge-kafka-exporter
+    depends_on:
+      - kafka
+    ports:
+      - "9308:9308"
+    command:
+      - '--kafka.server=kafka:9093'
+    networks:
+      - toolschallenge-network
+
 networks:
   toolschallenge-network:
     driver: bridge

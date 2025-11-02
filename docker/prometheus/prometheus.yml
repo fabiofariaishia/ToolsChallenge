@@ -38,23 +38,29 @@ scrape_configs:
           service: 'api-pagamentos'
           environment: 'development'
 
-  # PostgreSQL Exporter (caso queira adicionar no futuro)
-  # - job_name: 'postgres'
-  #   static_configs:
-  #     - targets: ['postgres-exporter:9187']
-  #       labels:
-  #         service: 'postgres'
+  # PostgreSQL Exporter - Métricas de banco de dados
+  - job_name: 'postgres'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres'
+          database: 'pagamentos'
 
-  # Redis Exporter (caso queira adicionar no futuro)
-  # - job_name: 'redis'
-  #   static_configs:
-  #     - targets: ['redis-exporter:9121']
-  #       labels:
-  #         service: 'redis'
+  # Redis Exporter - Métricas de cache
+  - job_name: 'redis'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+          cache: 'idempotencia'
 
-  # Kafka Exporter (caso queira adicionar no futuro)
-  # - job_name: 'kafka'
-  #   static_configs:
-  #     - targets: ['kafka-exporter:9308']
-  #       labels:
-  #         service: 'kafka'
+  # Kafka Exporter - Métricas de mensageria
+  - job_name: 'kafka'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+        labels:
+          service: 'kafka'
+          broker: 'toolschallenge'
