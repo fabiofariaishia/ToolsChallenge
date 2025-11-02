@@ -62,13 +62,16 @@ public class ReprocessamentoScheduler {
      */
     @Scheduled(fixedRate = 300000) // 5 minutos
     public void reprocessarEstornosPendentes() {
-        log.info("Iniciando reprocessamento de estornos pendentes");
+        long startTime = System.currentTimeMillis();
+        log.info("📅 [SCHEDULER] Iniciando job de reprocessamento de estornos pendentes");
         
         try {
             estornoService.reprocessarEstornosPendentes();
-            log.info("Reprocessamento de estornos pendentes concluído");
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("✅ [SCHEDULER] Job de reprocessamento de estornos concluído com sucesso (tempo: {}ms)", duration);
         } catch (Exception e) {
-            log.error("Erro ao reprocessar estornos pendentes: {}", e.getMessage(), e);
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("❌ [SCHEDULER] Erro ao reprocessar estornos pendentes (tempo: {}ms): {}", duration, e.getMessage(), e);
         }
     }
 
@@ -80,13 +83,16 @@ public class ReprocessamentoScheduler {
      */
     @Scheduled(fixedRate = 300000) // 5 minutos
     public void reprocessarPagamentosPendentes() {
-        log.info("Iniciando reprocessamento de pagamentos pendentes");
+        long startTime = System.currentTimeMillis();
+        log.info("📅 [SCHEDULER] Iniciando job de reprocessamento de pagamentos pendentes");
         
         try {
             pagamentoService.reprocessarPagamentosPendentes();
-            log.info("Reprocessamento de pagamentos pendentes concluído");
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("✅ [SCHEDULER] Job de reprocessamento de pagamentos concluído com sucesso (tempo: {}ms)", duration);
         } catch (Exception e) {
-            log.error("Erro ao reprocessar pagamentos pendentes: {}", e.getMessage(), e);
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("❌ [SCHEDULER] Erro ao reprocessar pagamentos pendentes (tempo: {}ms): {}", duration, e.getMessage(), e);
         }
     }
 }
