@@ -3,6 +3,8 @@ package br.com.sicredi.toolschallenge.adquirente.service;
 import br.com.sicredi.toolschallenge.adquirente.domain.StatusAutorizacao;
 import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoRequest;
 import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoResponse;
+import br.com.sicredi.toolschallenge.adquirente.events.AutorizacaoRealizadaEvento;
+import br.com.sicredi.toolschallenge.infra.outbox.publisher.EventoPublisher;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
@@ -37,9 +39,14 @@ import org.springframework.stereotype.Service;
 public class AdquirenteService {
 
     private final AdquirenteSimuladoService adquirenteSimulado;
+    private final EventoPublisher eventoPublisher;
 
-    public AdquirenteService(AdquirenteSimuladoService adquirenteSimulado) {
+    public AdquirenteService(
+        AdquirenteSimuladoService adquirenteSimulado,
+        EventoPublisher eventoPublisher
+    ) {
         this.adquirenteSimulado = adquirenteSimulado;
+        this.eventoPublisher = eventoPublisher;
     }
 
     /**
@@ -61,7 +68,12 @@ public class AdquirenteService {
         log.info("Autorizando pagamento com resiliência: cartão={}", 
             maskCartao(request.numeroCartao()));
         
-        return adquirenteSimulado.autorizarPagamento(request);
+        AutorizacaoResponse response = adquirenteSimulado.autorizarPagamento(request);
+        
+        // Publicar evento de autorização realizada (sucesso)
+        publicarEventoAutorizacao("PAGAMENTO", request, response, false, null);
+        
+        return response;
     }
 
     /**
@@ -81,7 +93,12 @@ public class AdquirenteService {
             ex.getClass().getSimpleName());
         
         // Retorna PENDENTE (sem NSU/código) para reprocessamento posterior
-        return new AutorizacaoResponse(StatusAutorizacao.PENDENTE, null, null);
+        AutorizacaoResponse response = new AutorizacaoResponse(StatusAutorizacao.PENDENTE, null, null);
+        
+        // Publicar evento de fallback
+        publicarEventoAutorizacao("PAGAMENTO", request, response, true, ex.getMessage());
+        
+        return response;
     }
     
     /**
@@ -92,7 +109,13 @@ public class AdquirenteService {
     @Bulkhead(name = "adquirente", type = Bulkhead.Type.THREADPOOL)
     public AutorizacaoResponse processarEstorno(AutorizacaoRequest request) {
         log.info("Processando estorno com resiliência");
-        return adquirenteSimulado.processarEstorno(request);
+        
+        AutorizacaoResponse response = adquirenteSimulado.processarEstorno(request);
+        
+        // Publicar evento de estorno realizado
+        publicarEventoAutorizacao("ESTORNO", request, response, false, null);
+        
+        return response;
     }
     
     private AutorizacaoResponse processarEstornoFallback(
@@ -100,7 +123,67 @@ public class AdquirenteService {
         Exception ex
     ) {
         log.warn("🔴 FALLBACK ESTORNO - Marcando como PENDENTE");
-        return new AutorizacaoResponse(StatusAutorizacao.PENDENTE, null, null);
+        
+        AutorizacaoResponse response = new AutorizacaoResponse(StatusAutorizacao.PENDENTE, null, null);
+        
+        // Publicar evento de fallback do estorno
+        publicarEventoAutorizacao("ESTORNO", request, response, true, ex.getMessage());
+        
+        return response;
+    }
+    
+    /**
+     * Publica evento de autorização realizada no Outbox (para Kafka).
+     * 
+     * @param tipoOperacao PAGAMENTO ou ESTORNO
+     * @param request Dados da requisição
+     * @param response Resposta da autorização
+     * @param fallbackAtivado Se foi ativado fallback (Circuit Breaker)
+     * @param motivoFalha Mensagem de erro se houve falha
+     */
+    private void publicarEventoAutorizacao(
+        String tipoOperacao,
+        AutorizacaoRequest request,
+        AutorizacaoResponse response,
+        boolean fallbackAtivado,
+        String motivoFalha
+    ) {
+        try {
+            // Criar dados do evento
+            AutorizacaoRealizadaEvento.DadosAutorizacao dados = new AutorizacaoRealizadaEvento.DadosAutorizacao(
+                tipoOperacao,
+                response.status(),
+                request.valor(),
+                maskCartao(request.numeroCartao()),
+                response.nsu(),
+                response.codigoAutorizacao(),
+                fallbackAtivado,
+                motivoFalha
+            );
+            
+            // Criar evento
+            String agregadoId = "autorizacao-" + System.currentTimeMillis();
+            AutorizacaoRealizadaEvento evento = new AutorizacaoRealizadaEvento(
+                agregadoId,
+                dados
+            );
+            
+            // Publicar via método público do EventoPublisher
+            eventoPublisher.publicarEventoGenerico(
+                agregadoId,
+                "Autorizacao",
+                "AUTORIZACAO_REALIZADA",
+                evento,
+                "adquirente.eventos"
+            );
+            
+            log.debug("Evento de autorização publicado: tipo={}, status={}, fallback={}", 
+                tipoOperacao, response.status(), fallbackAtivado);
+                
+        } catch (Exception ex) {
+            // Não falhar a operação principal se publicação falhar
+            log.error("Erro ao publicar evento de autorização: {}", ex.getMessage(), ex);
+        }
     }
     
     private String maskCartao(String numeroCartao) {

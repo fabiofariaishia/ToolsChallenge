@@ -95,6 +95,38 @@ public class EventoPublisher {
     }
 
     /**
+     * Publica evento genérico de qualquer módulo.
+     * 
+     * Uso em módulos que não têm método específico (ex: adquirente):
+     * <pre>
+     * {@code
+     * eventoPublisher.publicarEventoGenerico(
+     *     "autorizacao-123", 
+     *     "Autorizacao", 
+     *     "AUTORIZACAO_REALIZADA", 
+     *     evento, 
+     *     "adquirente.eventos"
+     * );
+     * }
+     * </pre>
+     * 
+     * @param agregadoId ID do agregado (ex: "autorizacao-123", "TXN-001")
+     * @param agregadoTipo Tipo do agregado (ex: "Autorizacao", "Pagamento")
+     * @param eventoTipo Tipo do evento (ex: "AUTORIZACAO_REALIZADA", "PagamentoCriado")
+     * @param evento Objeto do evento (será convertido para Map automaticamente)
+     * @param topicoKafka Tópico Kafka onde o evento será publicado (ex: "adquirente.eventos")
+     */
+    public void publicarEventoGenerico(
+            String agregadoId,
+            String agregadoTipo,
+            String eventoTipo,
+            Object evento,
+            String topicoKafka) {
+        
+        publicarEvento(agregadoId, agregadoTipo, eventoTipo, evento, topicoKafka);
+    }
+
+    /**
      * Publica evento genérico no outbox.
      * 
      * @param agregadoId ID do agregado
