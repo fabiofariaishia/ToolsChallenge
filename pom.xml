@@ -129,6 +129,16 @@
 			<scope>runtime</scope>
 		</dependency>
 
+		<!-- Micrometer Tracing (Distributed Tracing → Jaeger) -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-tracing-bridge-otel</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.opentelemetry</groupId>
+			<artifactId>opentelemetry-exporter-otlp</artifactId>
+		</dependency>
+
 		<!-- OpenAPI (Springdoc) -->
 		<dependency>
 			<groupId>org.springdoc</groupId>
