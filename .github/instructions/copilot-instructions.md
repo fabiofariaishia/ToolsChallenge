@@ -2288,6 +2288,197 @@ mvn test jacoco:report
 
 ---
 
+## 🎯 **Regras de Desenvolvimento de Testes (TDD)**
+
+### **⚠️ REGRAS CRÍTICAS - SEMPRE SEGUIR**
+
+#### **1. Metodologia Red-Green-Refactor (TDD Clássico)**
+
+**OBRIGATÓRIO**: Ao criar testes automatizados, seguir o ciclo completo:
+
+**🔴 RED (Falha)**
+1. Criar cenário de teste que **DEVE FALHAR**
+2. Executar o teste
+3. **VERIFICAR que falhou** com a mensagem esperada
+4. **Nunca** prosseguir se o teste passar antes da implementação
+
+**🟢 GREEN (Sucesso)**
+1. Implementar o código mínimo para fazer o teste **passar**
+2. Executar o teste novamente
+3. **VERIFICAR que passou**
+
+**🔵 REFACTOR (Melhoria)**
+1. Melhorar o código mantendo os testes passando
+2. Executar testes após cada refatoração
+
+**Exemplo Prático**:
+```java
+// PASSO 1: RED - Criar teste que DEVE FALHAR
+@Test
+void deveLancarExcecaoQuandoValorNegativo() {
+    // Arrange
+    EstornoRequestDTO request = new EstornoRequestDTO();
+    request.setValor(new BigDecimal("-100.00")); // Valor negativo
+    
+    // Act & Assert
+    assertThatThrownBy(() -> service.criarEstorno(request))
+        .isInstanceOf(NegocioException.class)
+        .hasMessageContaining("Valor deve ser positivo");
+}
+
+// EXECUTAR: mvn test -Dtest=EstornoServiceTest#deveLancarExcecaoQuandoValorNegativo
+// RESULTADO ESPERADO: ❌ FALHA (código ainda não valida)
+
+// PASSO 2: GREEN - Implementar validação
+public void criarEstorno(EstornoRequestDTO request) {
+    if (request.getValor().compareTo(BigDecimal.ZERO) < 0) {
+        throw new NegocioException("Valor deve ser positivo");
+    }
+    // ... resto do código
+}
+
+// EXECUTAR: mvn test -Dtest=EstornoServiceTest#deveLancarExcecaoQuandoValorNegativo
+// RESULTADO ESPERADO: ✅ SUCESSO
+
+// PASSO 3: REFACTOR - Melhorar sem quebrar teste
+```
+
+**Por que essa regra é crítica?**
+- ✅ Garante que o teste está **realmente testando** a lógica
+- ✅ Previne **falsos positivos** (testes que passam mas não validam nada)
+- ✅ Documenta o comportamento esperado **antes** da implementação
+- ❌ **Risco**: Testes que sempre passam podem estar encobrindo bugs
+
+#### **2. Prioridade de Testes: Unitários PRIMEIRO**
+
+**REGRA**: Se o usuário **NÃO** solicitar explicitamente testes de integração, criar **APENAS** testes unitários.
+
+**Testes Unitários** (Prioridade ALTA - Fazer SEMPRE):
+- ✅ Rápidos (< 1 segundo cada)
+- ✅ Isolados (todos os dependencies mockados)
+- ✅ Focados (testam 1 comportamento por vez)
+- ✅ Executados a cada build
+- **Padrão**: `*ServiceTest.java`, `*ControllerTest.java`, `*MapperTest.java`
+
+**Testes de Integração** (Prioridade BAIXA - Fazer APENAS quando solicitado):
+- ⏳ Lentos (> 5 segundos cada)
+- ⏳ Complexos (Testcontainers, banco real, Kafka, Redis)
+- ⏳ E2E (validam integração entre múltiplas camadas)
+- ⏳ Executados em CI/CD
+- **Padrão**: `*IntegrationTest.java`
+- **Momento**: **Apenas após projeto completo** ou quando usuário solicitar
+
+**Exemplo de Decisão**:
+```
+Usuário diz: "Crie testes para EstornoService"
+→ Criar APENAS EstornoServiceTest.java (unitário)
+→ NÃO criar EstornoIntegrationTest.java
+
+Usuário diz: "Crie testes de integração para Estorno"
+→ Criar EstornoIntegrationTest.java (com Testcontainers)
+
+Usuário diz: "Crie todos os testes"
+→ Perguntar: "Deseja incluir testes de integração também, ou apenas unitários?"
+```
+
+**Por que essa regra é crítica?**
+- ✅ Testes unitários são mais **rápidos de criar e executar**
+- ✅ Testes de integração requerem **infraestrutura complexa** (Docker, Testcontainers)
+- ✅ Testes de integração devem ser feitos **após** projeto estabilizado
+- ❌ **Risco**: Criar testes de integração prematuramente causa lentidão no desenvolvimento
+
+#### **3. Processo de Decisão: Sempre Perguntar ao Usuário**
+
+**REGRA**: Ao chegar em **cenários com múltiplas opções válidas**, **NUNCA** escolher automaticamente. **SEMPRE** perguntar ao usuário qual abordagem prefere.
+
+**Cenários que requerem pergunta**:
+
+**Exemplo 1: Teste Falhando - Validação Faltando**
+```
+Situação: Teste falha com NullPointerException em pagamento.getDataHora()
+
+Opção A: Adicionar null check no código de produção (validação defensiva)
+Opção B: Corrigir apenas o teste (assumir que @PrePersist sempre funciona)
+
+❌ ERRADO: Escolher Opção A automaticamente
+✅ CORRETO: 
+"Encontrei um NullPointerException. Há duas abordagens:
+- Opção A: Adicionar validação defensiva no código (if dataHora == null)
+- Opção B: Confiar no @PrePersist e corrigir apenas o teste
+
+Qual abordagem você prefere?"
+```
+
+**Exemplo 2: Múltiplas Tecnologias Possíveis**
+```
+Situação: Criar testes REST para Controller
+
+Opção A: Usar MockMvc (@WebMvcTest)
+Opção B: Usar RestAssured
+Opção C: Usar TestRestTemplate
+
+✅ CORRETO:
+"Para testes REST, existem 3 opções:
+- MockMvc: Mais rápido, sem servidor HTTP real
+- RestAssured: Mais legível, DSL fluente
+- TestRestTemplate: Integração Spring Boot
+
+Qual você prefere? (Recomendo MockMvc para unitários)"
+```
+
+**Exemplo 3: Estratégia de Refatoração**
+```
+Situação: Código tem duplicação em 3 lugares
+
+Opção A: Extrair para método privado
+Opção B: Criar classe helper
+Opção C: Deixar duplicado (YAGNI - You Aren't Gonna Need It)
+
+✅ CORRETO:
+"Identifiquei código duplicado em 3 lugares. Opções:
+- A) Extrair para método privado (mais simples)
+- B) Criar classe helper (mais reutilizável)
+- C) Deixar duplicado (Regra dos 3 - ainda não justifica abstração)
+
+Qual abordagem você prefere?"
+```
+
+**Por que essa regra é crítica?**
+- ✅ Usuário mantém **controle das decisões** arquiteturais
+- ✅ Evita **over-engineering** (agente escolhendo solução mais complexa)
+- ✅ Decisões ficam **documentadas** na conversa
+- ✅ Alinha expectativas entre agente e usuário
+- ❌ **Risco**: Tomar decisões erradas que precisam ser revertidas depois
+
+### **📋 Checklist de Testes**
+
+Antes de considerar um módulo "testado", verificar:
+
+- [ ] **RED**: Todos os testes falharam ANTES da implementação?
+- [ ] **GREEN**: Todos os testes passam APÓS a implementação?
+- [ ] **Unitários**: Todos os dependencies estão mockados?
+- [ ] **Integração**: Apenas se solicitado explicitamente pelo usuário?
+- [ ] **Decisões**: Todas as escolhas foram apresentadas ao usuário?
+- [ ] **Cobertura**: Todos os cenários críticos estão cobertos?
+- [ ] **Nomenclatura**: Nomes descrevem o comportamento esperado?
+- [ ] **Isolamento**: Cada teste pode rodar independentemente?
+
+### **🎯 Prioridade de Implementação de Testes**
+
+**Ordem OBRIGATÓRIA**:
+1. ✅ **Testes Unitários de Service** (`*ServiceTest.java`) - SEMPRE
+2. ✅ **Testes Unitários de Controller** (`*ControllerTest.java`) - SEMPRE
+3. ✅ **Testes Unitários de Mapper** (`*MapperTest.java`) - SEMPRE
+4. ⏳ **Testes de Integração** (`*IntegrationTest.java`) - **APENAS SE SOLICITADO**
+
+**Quando criar testes de integração**:
+- ✅ Usuário solicitou explicitamente
+- ✅ Projeto completo (todos os módulos implementados)
+- ✅ Infraestrutura Docker configurada (Testcontainers)
+- ❌ **NUNCA** criar antes de completar testes unitários
+
+---
+
 ## 🚀 **Deploy e CI/CD**
 
 ### **TODO - Pipeline GitHub Actions**
