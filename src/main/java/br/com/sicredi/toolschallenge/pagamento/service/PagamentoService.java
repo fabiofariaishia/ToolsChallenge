@@ -10,6 +10,10 @@ import br.com.sicredi.toolschallenge.pagamento.events.PagamentoStatusAlteradoEve
 import br.com.sicredi.toolschallenge.pagamento.repository.PagamentoRepository;
 import br.com.sicredi.toolschallenge.infra.outbox.publisher.EventoPublisher;
 import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
+import br.com.sicredi.toolschallenge.adquirente.service.AdquirenteService;
+import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoRequest;
+import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoResponse;
+import br.com.sicredi.toolschallenge.adquirente.domain.StatusAutorizacao;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -27,7 +31,7 @@ import java.util.stream.Collectors;
  * 
  * Responsabilidades:
  * - Criar novo pagamento (status=PENDENTE)
- * - Simular autorização (gerar NSU, código)
+ * - Autorizar via AdquirenteService (Circuit Breaker, Retry, Bulkhead)
  * - Consultar pagamentos
  * - Validações de regras de negócio
  */
@@ -41,20 +45,27 @@ public class PagamentoService {
     private final PagamentoMapper mapper;
     private final EventoPublisher eventoPublisher;
     private final ApplicationEventPublisher eventPublisher;
+    private final AdquirenteService adquirenteService;
     private final Random random = new Random();
 
     /**
-     * Cria um novo pagamento e simula autorização.
+     * Cria um novo pagamento e autoriza com adquirente.
      * 
      * Fluxo:
      * 1. Valida request
      * 2. Cria pagamento com status=PENDENTE
-     * 3. Simula autorização (90% aprovado, 10% negado)
-     * 4. Atualiza status e persiste
-     * 5. Retorna DTO de resposta
+     * 3. Autoriza com AdquirenteService (Circuit Breaker + Retry + Bulkhead)
+     * 4. Mapeia StatusAutorizacao → StatusPagamento
+     * 5. Atualiza status e persiste
+     * 6. Retorna DTO de resposta
+     * 
+     * Mapeamento de Status:
+     * - AUTORIZADO → AUTORIZADO (com NSU/código)
+     * - NEGADO → NEGADO (sem NSU/código)
+     * - PENDENTE → PENDENTE (Circuit Breaker OPEN ou timeout, para reprocessamento)
      * 
      * @param request DTO com dados do pagamento
-     * @return DTO de resposta com status autorizado ou negado
+     * @return DTO de resposta com status autorizado, negado ou pendente
      */
     @Transactional
     public PagamentoResponseDTO criarPagamento(PagamentoRequestDTO request) {
@@ -83,9 +94,9 @@ public class PagamentoService {
         // Publicar evento: Pagamento Criado
         publicarEventoPagamentoCriado(pagamento);
         
-        // Simular autorização com adquirente
+        // Autorizar com adquirente (Circuit Breaker + Retry + Bulkhead)
         StatusPagamento statusAnterior = pagamento.getStatus();
-        simularAutorizacao(pagamento);
+        autorizarComAdquirente(pagamento);
         
         // Salvar com novo status
         pagamento = repository.save(pagamento);
@@ -151,51 +162,62 @@ public class PagamentoService {
     }
 
     /**
-     * Simula autorização com adquirente/gateway de pagamento.
+     * Autoriza pagamento com adquirente via AdquirenteService.
      * 
-     * Regras de simulação:
-     * - 90% de chance de AUTORIZADO
-     * - 10% de chance de NEGADO
-     * - Se autorizado: gera NSU e código de autorização
+     * Aplica padrões de resiliência:
+     * - Circuit Breaker: Protege contra falhas em cascata
+     * - Retry: Tenta até 3x em caso de falha transitória
+     * - Bulkhead: Isola pool de threads
+     * 
+     * Mapeamento de Status:
+     * - StatusAutorizacao.AUTORIZADO → StatusPagamento.AUTORIZADO + NSU + Código
+     * - StatusAutorizacao.NEGADO → StatusPagamento.NEGADO
+     * - StatusAutorizacao.PENDENTE → StatusPagamento.PENDENTE (Circuit Breaker OPEN ou timeout)
+     * 
+     * Pagamentos PENDENTE devem ser reprocessados posteriormente via scheduler.
      * 
      * @param pagamento Pagamento a ser autorizado
      */
-    private void simularAutorizacao(Pagamento pagamento) {
-        log.info("Simulando autorização do pagamento {}", pagamento.getIdTransacao());
+    private void autorizarComAdquirente(Pagamento pagamento) {
+        log.info("Autorizando pagamento {} com adquirente", pagamento.getIdTransacao());
         
-        // Simular resposta da adquirente (90% aprovação)
-        boolean autorizado = random.nextInt(100) < 90;
-        
-        if (autorizado) {
-            pagamento.setStatus(StatusPagamento.AUTORIZADO);
-            pagamento.setNsu(gerarNSU());
-            pagamento.setCodigoAutorizacao(gerarCodigoAutorizacao());
-            log.info("Pagamento AUTORIZADO - NSU: {}, Código: {}", 
-                pagamento.getNsu(), pagamento.getCodigoAutorizacao());
-        } else {
-            pagamento.setStatus(StatusPagamento.NEGADO);
-            log.warn("Pagamento NEGADO - ID: {}", pagamento.getIdTransacao());
+        try {
+            // Criar request para adquirente
+            AutorizacaoRequest request = new AutorizacaoRequest(
+                pagamento.getCartaoMascarado(),
+                "***", // CVV não armazenado (PCI-DSS compliance)
+                "12/2030", // Validade simulada
+                pagamento.getValor(),
+                pagamento.getEstabelecimento()
+            );
+            
+            // Chamar adquirente (Circuit Breaker + Retry + Bulkhead)
+            AutorizacaoResponse response = adquirenteService.autorizarPagamento(request);
+            
+            // Mapear StatusAutorizacao → StatusPagamento
+            if (response.status() == StatusAutorizacao.AUTORIZADO) {
+                pagamento.setStatus(StatusPagamento.AUTORIZADO);
+                pagamento.setNsu(response.nsu());
+                pagamento.setCodigoAutorizacao(response.codigoAutorizacao());
+                log.info("Pagamento AUTORIZADO - ID: {}, NSU: {}, Código: {}", 
+                    pagamento.getIdTransacao(), response.nsu(), response.codigoAutorizacao());
+                
+            } else if (response.status() == StatusAutorizacao.NEGADO) {
+                pagamento.setStatus(StatusPagamento.NEGADO);
+                log.warn("Pagamento NEGADO - ID: {}", pagamento.getIdTransacao());
+                
+            } else if (response.status() == StatusAutorizacao.PENDENTE) {
+                pagamento.setStatus(StatusPagamento.PENDENTE);
+                log.warn("Pagamento PENDENTE (Circuit Breaker ou timeout) - ID: {}", 
+                    pagamento.getIdTransacao());
+            }
+            
+        } catch (Exception ex) {
+            // Fallback: Manter PENDENTE se erro inesperado
+            pagamento.setStatus(StatusPagamento.PENDENTE);
+            log.error("Erro ao autorizar pagamento {} - Mantendo PENDENTE: {}", 
+                pagamento.getIdTransacao(), ex.getMessage());
         }
-    }
-
-    /**
-     * Gera NSU (Número Sequencial Único) simulado.
-     * Formato: 10 dígitos numéricos
-     * 
-     * @return NSU gerado
-     */
-    private String gerarNSU() {
-        return String.format("%010d", random.nextInt(1000000000));
-    }
-
-    /**
-     * Gera código de autorização simulado.
-     * Formato: 6 dígitos numéricos
-     * 
-     * @return Código de autorização
-     */
-    private String gerarCodigoAutorizacao() {
-        return String.format("%06d", random.nextInt(1000000));
     }
 
     /**

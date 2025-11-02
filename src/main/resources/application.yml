@@ -115,8 +115,8 @@ resilience4j:
 # Configuração do Adquirente Simulado (Chaos Engineering)
 adquirente:
   simulado:
-    # Taxa de falhas (0.0 a 1.0) - 0.2 = 20% de falhas
-    failure-rate: 0.2
+    # Taxa de falhas (0.0 a 1.0) - 0.8 = 80% de falhas (TESTE CIRCUIT BREAKER)
+    failure-rate: 0.8
     # Latência artificial em ms (simula lentidão)
     latency-ms: 100
     # Taxa de timeouts extremos (0.0 a 1.0) - 0.1 = 10% timeouts

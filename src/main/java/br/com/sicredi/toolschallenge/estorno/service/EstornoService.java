@@ -14,6 +14,10 @@ import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
 import br.com.sicredi.toolschallenge.pagamento.repository.PagamentoRepository;
 import br.com.sicredi.toolschallenge.shared.exception.NegocioException;
 import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
+import br.com.sicredi.toolschallenge.adquirente.service.AdquirenteService;
+import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoRequest;
+import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoResponse;
+import br.com.sicredi.toolschallenge.adquirente.domain.StatusAutorizacao;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
@@ -37,7 +41,7 @@ import java.util.stream.Collectors;
  * Responsabilidades:
  * - Criar solicitação de estorno com lock distribuído (Redisson)
  * - Validar regras de negócio (pagamento autorizado, prazo 24h, valor correto)
- * - Simular processamento de estorno
+ * - Processar estorno via AdquirenteService (Circuit Breaker + Retry + Bulkhead)
  * - Consultar estornos
  * 
  * Lock Distribuído:
@@ -57,6 +61,7 @@ public class EstornoService {
     private final EstornoMapper mapper;
     private final EventoPublisher eventoPublisher;
     private final ApplicationEventPublisher eventPublisher;
+    private final AdquirenteService adquirenteService;
     private final Random random = new Random();
     
     @Autowired(required = false)
@@ -170,9 +175,9 @@ public class EstornoService {
             // Publicar evento: Estorno Criado
             publicarEventoEstornoCriado(estorno, pagamento);
 
-            // 7. Simular processamento do estorno
+            // 7. Processar estorno com adquirente (Circuit Breaker + Retry + Bulkhead)
             StatusEstorno statusAnterior = estorno.getStatus();
-            simularProcessamentoEstorno(estorno);
+            processarEstornoComAdquirente(estorno, pagamento);
 
             // Salvar com novo status
             estorno = repository.save(estorno);
@@ -269,51 +274,63 @@ public class EstornoService {
     }
 
     /**
-     * Simula processamento do estorno com adquirente.
+     * Processa estorno com adquirente via AdquirenteService.
      * 
-     * Regras de simulação:
-     * - 95% de chance de CANCELADO (aprovado)
-     * - 5% de chance de NEGADO
-     * - Se cancelado: gera NSU e código de autorização
+     * Aplica padrões de resiliência:
+     * - Circuit Breaker: Protege contra falhas em cascata
+     * - Retry: Tenta até 3x em caso de falha transitória
+     * - Bulkhead: Isola pool de threads
+     * 
+     * Mapeamento de Status:
+     * - StatusAutorizacao.AUTORIZADO → StatusEstorno.CANCELADO (estorno aprovado) + NSU + Código
+     * - StatusAutorizacao.NEGADO → StatusEstorno.NEGADO (estorno recusado)
+     * - StatusAutorizacao.PENDENTE → StatusEstorno.PENDENTE (Circuit Breaker OPEN ou timeout)
+     * 
+     * Estornos PENDENTE devem ser reprocessados posteriormente via scheduler.
      * 
      * @param estorno Estorno a ser processado
+     * @param pagamento Pagamento original a ser estornado
      */
-    private void simularProcessamentoEstorno(Estorno estorno) {
-        log.info("Simulando processamento do estorno {}", estorno.getIdEstorno());
-
-        // Simular resposta da adquirente (95% aprovação para estorno)
-        boolean cancelado = random.nextInt(100) < 95;
-
-        if (cancelado) {
-            estorno.setStatus(StatusEstorno.CANCELADO);
-            estorno.setNsu(gerarNSU());
-            estorno.setCodigoAutorizacao(gerarCodigoAutorizacao());
-            log.info("Estorno CANCELADO (aprovado) - NSU: {}, Código: {}", 
-                estorno.getNsu(), estorno.getCodigoAutorizacao());
-        } else {
-            estorno.setStatus(StatusEstorno.NEGADO);
-            log.warn("Estorno NEGADO - ID: {}", estorno.getIdEstorno());
+    private void processarEstornoComAdquirente(Estorno estorno, Pagamento pagamento) {
+        log.info("Processando estorno {} com adquirente", estorno.getIdEstorno());
+        
+        try {
+            // Criar request para adquirente
+            AutorizacaoRequest request = new AutorizacaoRequest(
+                pagamento.getCartaoMascarado(),
+                "***", // CVV não armazenado (PCI-DSS compliance)
+                "12/2030", // Validade simulada
+                estorno.getValor(),
+                pagamento.getEstabelecimento()
+            );
+            
+            // Chamar adquirente (Circuit Breaker + Retry + Bulkhead)
+            AutorizacaoResponse response = adquirenteService.processarEstorno(request);
+            
+            // Mapear StatusAutorizacao → StatusEstorno
+            if (response.status() == StatusAutorizacao.AUTORIZADO) {
+                estorno.setStatus(StatusEstorno.CANCELADO); // AUTORIZADO = estorno aprovado
+                estorno.setNsu(response.nsu());
+                estorno.setCodigoAutorizacao(response.codigoAutorizacao());
+                log.info("Estorno CANCELADO (aprovado) - ID: {}, NSU: {}, Código: {}", 
+                    estorno.getIdEstorno(), response.nsu(), response.codigoAutorizacao());
+                
+            } else if (response.status() == StatusAutorizacao.NEGADO) {
+                estorno.setStatus(StatusEstorno.NEGADO);
+                log.warn("Estorno NEGADO - ID: {}", estorno.getIdEstorno());
+                
+            } else if (response.status() == StatusAutorizacao.PENDENTE) {
+                estorno.setStatus(StatusEstorno.PENDENTE);
+                log.warn("Estorno PENDENTE (Circuit Breaker ou timeout) - ID: {}", 
+                    estorno.getIdEstorno());
+            }
+            
+        } catch (Exception ex) {
+            // Fallback: Manter PENDENTE se erro inesperado
+            estorno.setStatus(StatusEstorno.PENDENTE);
+            log.error("Erro ao processar estorno {} - Mantendo PENDENTE: {}", 
+                estorno.getIdEstorno(), ex.getMessage());
         }
-    }
-
-    /**
-     * Gera NSU (Número Sequencial Único) simulado.
-     * Formato: 10 dígitos numéricos
-     * 
-     * @return NSU gerado
-     */
-    private String gerarNSU() {
-        return String.format("%010d", random.nextInt(1000000000));
-    }
-
-    /**
-     * Gera código de autorização simulado.
-     * Formato: 6 dígitos numéricos
-     * 
-     * @return Código de autorização
-     */
-    private String gerarCodigoAutorizacao() {
-        return String.format("%06d", random.nextInt(1000000));
     }
 
     /**
