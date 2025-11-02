@@ -8,6 +8,7 @@ import br.com.sicredi.toolschallenge.infra.outbox.publisher.EventoPublisher;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -39,10 +40,12 @@ import org.springframework.stereotype.Service;
 public class AdquirenteService {
 
     private final AdquirenteSimuladoService adquirenteSimulado;
+    private final MeterRegistry meterRegistry;
     private EventoPublisher eventoPublisher;  // Removido 'final' para permitir @Autowired opcional
 
-    public AdquirenteService(AdquirenteSimuladoService adquirenteSimulado) {
+    public AdquirenteService(AdquirenteSimuladoService adquirenteSimulado, MeterRegistry meterRegistry) {
         this.adquirenteSimulado = adquirenteSimulado;
+        this.meterRegistry = meterRegistry;
     }
     
     /**

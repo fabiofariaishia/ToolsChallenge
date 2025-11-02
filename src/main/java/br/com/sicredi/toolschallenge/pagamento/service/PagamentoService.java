@@ -15,6 +15,7 @@ import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoRequest;
 import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoResponse;
 import br.com.sicredi.toolschallenge.adquirente.domain.StatusAutorizacao;
 import br.com.sicredi.toolschallenge.shared.config.ReprocessamentoProperties;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -48,6 +49,7 @@ public class PagamentoService {
     private final ApplicationEventPublisher eventPublisher;
     private final AdquirenteService adquirenteService;
     private final ReprocessamentoProperties reprocessamentoProperties;
+    private final MeterRegistry meterRegistry;
     private final Random random = new Random();
 
     /**
