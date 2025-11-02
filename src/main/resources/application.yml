@@ -58,7 +58,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info,metrics,prometheus,circuitbreakers,circuitbreakerevents
       base-path: /atuador
   endpoint:
     health:
@@ -68,7 +68,61 @@ management:
       export:
         enabled: true
 
-        
+# Resilience4j (Circuit Breaker, Retry, Bulkhead)
+resilience4j:
+  circuitbreaker:
+    instances:
+      adquirente:
+        # Percentual de falhas para abrir o circuito
+        failure-rate-threshold: 50
+        # Janela de chamadas para calcular taxa de falha
+        sliding-window-size: 10
+        # Número mínimo de chamadas antes de calcular taxa
+        minimum-number-of-calls: 5
+        # Tempo em OPEN antes de tentar HALF_OPEN
+        wait-duration-in-open-state: 10s
+        # Chamadas permitidas em HALF_OPEN para teste
+        permitted-number-of-calls-in-half-open-state: 3
+        # Transição automática para HALF_OPEN após wait-duration
+        automatic-transition-from-open-to-half-open-enabled: true
+        # Registra eventos no Actuator
+        register-health-indicator: true
+
+  retry:
+    instances:
+      adquirente:
+        # Número máximo de tentativas (1 original + 2 retries)
+        max-attempts: 3
+        # Intervalo entre tentativas
+        wait-duration: 500ms
+        # Exceções que devem acionar retry
+        retry-exceptions:
+          - br.com.sicredi.toolschallenge.shared.exception.ServicoIndisponivelException
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+
+  bulkhead:
+    instances:
+      adquirente:
+        # Tipo thread pool (isola threads da aplicação)
+        max-thread-pool-size: 10
+        core-thread-pool-size: 5
+        # Fila de espera quando threads estão ocupadas
+        queue-capacity: 20
+        # Timeout para aguardar thread disponível
+        keep-alive-duration: 20ms
+
+# Configuração do Adquirente Simulado (Chaos Engineering)
+adquirente:
+  simulado:
+    # Taxa de falhas (0.0 a 1.0) - 0.2 = 20% de falhas
+    failure-rate: 0.2
+    # Latência artificial em ms (simula lentidão)
+    latency-ms: 100
+    # Taxa de timeouts extremos (0.0 a 1.0) - 0.1 = 10% timeouts
+    timeout-rate: 0.1
+    # Taxa de aprovação quando disponível (0.9 = 90% aprovado)
+    aprovacao-rate: 0.9
 
         # OpenAPI/Swagger
 springdoc:

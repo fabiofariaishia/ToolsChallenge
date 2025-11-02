@@ -187,6 +187,36 @@ public class GlobalExceptionHandler {
     }
     
     /**
+     * Trata exceções de serviço indisponível (integrações externas)
+     * Retorna 503 Service Unavailable
+     * 
+     * Usado quando:
+     * - Adquirente de pagamentos está offline
+     * - APIs externas não respondem (timeout)
+     * - Circuit Breaker em estado OPEN
+     * - Serviços de notificação indisponíveis
+     */
+    @ExceptionHandler(ServicoIndisponivelException.class)
+    public ResponseEntity<ErroResposta> tratarServicoIndisponivel(
+            ServicoIndisponivelException ex,
+            HttpServletRequest request) {
+        
+        String traceId = gerarTraceId();
+        logger.error("[{}] Serviço indisponível: {} na requisição: {}", 
+                traceId, ex.getMessage(), request.getRequestURI());
+        
+        ErroResposta resposta = new ErroResposta(
+                HttpStatus.SERVICE_UNAVAILABLE.value(),
+                HttpStatus.SERVICE_UNAVAILABLE.getReasonPhrase(),
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+        resposta.setTraceId(traceId);
+        
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(resposta);
+    }
+    
+    /**
      * Trata IllegalArgumentException (argumentos inválidos)
      * Retorna 400 Bad Request
      */
