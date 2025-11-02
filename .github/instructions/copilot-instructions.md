@@ -51,11 +51,13 @@ Este projeto está sendo desenvolvido como **Monolito Modular** com a visão de 
    - ❌ **NUNCA** fazer `import` direto de classes de domínio de outro módulo
    - ❌ **NUNCA** usar `@Autowired` de `Service` de outro módulo diretamente
    - ❌ **NUNCA** criar abstrações complexas desnecessárias (custom annotations, frameworks internos, etc)
+   - ❌ **NUNCA** criar arquivos markdown (.md) para documentar cada interação ou criar scripts de terminal para explicações - Use o chat para isso
    - ✅ **SEMPRE** usar eventos de domínio para comunicação assíncrona
    - ✅ **SEMPRE** usar DTOs para comunicação síncrona (se necessário)
    - ✅ **SEMPRE** preferir simplicidade: use recursos nativos do Spring/Java antes de criar código customizado
    - ✅ **SEMPRE** pensar: "Se esse módulo fosse um microserviço separado, isso funcionaria?"
    - ✅ **SEMPRE** questionar: "Preciso mesmo criar isso ou já existe uma solução padrão?"
+   - ✅ **SEMPRE** explicar mudanças via chat, criar documentação markdown apenas quando solicitado explicitamente
 
 4. **Princípio KISS (Keep It Simple, Stupid)**
    - 🎯 **Simplicidade sobre Complexidade**: O código mais fácil de manter é o código simples
@@ -691,6 +693,53 @@ shared/
     └── ErroResposta.java             # DTO padrão de erro
 
 ```
+
+### **⚠️ Regra: Localização de Exceptions**
+
+**Princípio**: Exceptions **genéricas** devem estar em `shared/exception/`. Apenas crie exceptions **específicas de módulo** quando houver:
+
+1. ✅ **Lógica de negócio única** do domínio
+2. ✅ **Tratamento HTTP diferenciado** específico
+3. ✅ **Comportamento customizado** que não se aplica a outros módulos
+
+**Exemplos**:
+
+```java
+// ❌ ERRADO: Exception genérica no módulo
+// adquirente/exception/AdquirenteIndisponivelException.java
+public class AdquirenteIndisponivelException extends RuntimeException {
+    // Representa "serviço indisponível" - conceito genérico!
+}
+
+// ✅ CORRETO: Exception genérica em shared/
+// shared/exception/ServicoIndisponivelException.java
+public class ServicoIndisponivelException extends RuntimeException {
+    // Reutilizável por QUALQUER módulo que integre com serviços externos
+    // Retorna HTTP 503 (Service Unavailable)
+}
+
+// ✅ CORRETO: Exception específica de módulo (quando justificado)
+// pagamento/exception/LimiteCredito ExcedidoException.java
+public class LimiteCreditoExcedidoException extends NegocioException {
+    private BigDecimal limiteDisponivel;
+    private BigDecimal valorSolicitado;
+    
+    // Lógica específica do domínio "pagamento"
+    public BigDecimal calcularDiferenca() {
+        return valorSolicitado.subtract(limiteDisponivel);
+    }
+}
+```
+
+**Checklist antes de criar exception em módulo**:
+- [ ] Esta exception é **específica deste domínio**?
+- [ ] Ela tem **lógica de negócio** que não se aplica a outros módulos?
+- [ ] O tratamento HTTP é **diferente** das exceptions genéricas?
+- [ ] Se virar microserviço, ainda faria sentido tê-la internamente?
+
+Se **todas as respostas forem NÃO**, crie em `shared/exception/`.
+
+---
 
 ### **Exemplo: `shared/config/KafkaConfig.java`**
 
