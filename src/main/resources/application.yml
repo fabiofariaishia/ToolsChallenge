@@ -67,6 +67,13 @@ management:
     metrics:
       export:
         enabled: true
+  # Distributed Tracing (Micrometer → Jaeger via Zipkin endpoint)
+  tracing:
+    sampling:
+      probability: 1.0  # 100% sampling para desenvolvimento
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans  # Jaeger Zipkin-compatible endpoint
 
 # Resilience4j (Circuit Breaker, Retry, Bulkhead)
 resilience4j:
