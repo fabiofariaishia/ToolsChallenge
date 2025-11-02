@@ -1,26 +1,19 @@
-# 📘 **ToolsChallenge - API de Pagamentos Sicredi**
+# 📘 **ToolsChallenge - Regras de Desenvolvimento**
+
+> **Documentação Técnica Completa**: Ver [README.md](../../README.md)
 
 ## 📋 **Índice**
 1. [Visão Geral](#-visão-geral)
-2. [Arquitetura](#-arquitetura)
-3. [Estrutura de Pastas](#-estrutura-de-pastas)
-4. [Stack Tecnológico](#-stack-tecnológico)
-5. [Padrões Implementados](#-padrões-implementados)
-6. [Módulos e Funcionalidades](#-módulos-e-funcionalidades)
-7. [Camadas da Aplicação](#-camadas-da-aplicação)
-8. [Banco de Dados](#-banco-de-dados)
-9. [Mensageria (Kafka)](#-mensageria-kafka)
-10. [Cache e Locks Distribuídos](#-cache-e-locks-distribuídos)
-11. [Resiliência (Resilience4j)](#-resiliência-resilience4j)
-12. [Observabilidade](#-observabilidade)
-13. [Segurança](#-segurança)
-14. [APIs e Endpoints](#-apis-e-endpoints)
-15. [Configuração e Ambiente](#-configuração-e-ambiente)
-16. [Testes](#-testes)
-17. [Deploy e CI/CD](#-deploy-e-cicd)
-18. [Monitoramento](#-monitoramento)
-19. [Troubleshooting](#-troubleshooting)
-20. [Roadmap](#-roadmap)
+2. [Arquitetura Monolito Modular](#-arquitetura-monolito-modular)
+3. [Regras Fundamentais](#-regras-fundamentais)
+4. [Anatomia de um Módulo](#-anatomia-de-um-módulo)
+5. [Pasta shared/](#-pasta-shared)
+6. [Comunicação Entre Módulos](#-comunicação-entre-módulos)
+7. [Checklist de Novo Módulo](#-checklist-de-novo-módulo)
+8. [As 10 Regras de Ouro](#-as-10-regras-de-ouro)
+9. [Princípio KISS](#-princípio-kiss)
+10. [Regras de TDD](#-regras-de-tdd)
+11. [Roadmap](#-roadmap)
 
 ---
 
@@ -66,21 +59,6 @@ Este projeto está sendo desenvolvido como **Monolito Modular** com a visão de 
    - 🚫 **Evite Over-Engineering**: Não crie abstrações "para o futuro" que podem nunca ser necessárias
    - ✅ **Use o Padrão**: Bean Validation (`@NotNull`, `@Size`) em vez de annotations customizadas
    - ✅ **Use o Framework**: Spring já resolve 90% dos problemas, não reinvente a roda
-   - ⚠️ **Exemplo de Complexidade Desnecessária**:
-     ```java
-     // ❌ ERRADO: Criar annotation customizada para algo que Bean Validation já faz
-     @Target(ElementType.FIELD)
-     @Retention(RetentionPolicy.RUNTIME)
-     @Constraint(validatedBy = ValorMinimoValidator.class)
-     public @interface ValorMinimo {
-         String message() default "Valor inválido";
-         double value();
-     }
-     
-     // ✅ CORRETO: Usar Bean Validation padrão
-     @DecimalMin(value = "0.01", message = "Valor mínimo é R$ 0,01")
-     private BigDecimal valor;
-     ```
    - 💡 **Regra de Ouro**: Se você está criando código que parece "muito inteligente", provavelmente está fazendo errado
 
 5. **Estrutura de Banco de Dados**
@@ -108,56 +86,7 @@ Este projeto está sendo desenvolvido como **Monolito Modular** com a visão de 
 
 ---
 
-## 🏗️ **Arquitetura**
-
-### **Arquitetura: Monolito Modular**
-
-Este projeto adota a arquitetura **Modular Monolith** (Monolito Modular), que combina os benefícios de um monolito (simplicidade de deploy, baixa latência) com a modularização de microserviços (independência, escalabilidade de desenvolvimento).
-
-```
-┌────────────────────────────────────────────────────────────────────┐
-│                    MONOLITO MODULAR                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐    │
-│  │   MÓDULO     │  │   MÓDULO     │  │      MÓDULO          │    │
-│  │  PAGAMENTO   │  │   ESTORNO    │  │    ADQUIRENTE        │    │
-│  │              │  │              │  │                      │    │
-│  │ ┌──────────┐ │  │ ┌──────────┐ │  │ ┌──────────────────┐ │    │
-│  │ │Controller│ │  │ │Controller│ │  │ │    Service       │ │    │
-│  │ │  (API)   │ │  │ │  (API)   │ │  │ │  (Internal)      │ │    │
-│  │ └────┬─────┘ │  │ └────┬─────┘ │  │ └────────┬─────────┘ │    │
-│  │      │       │  │      │       │  │          │           │    │
-│  │ ┌────▼─────┐ │  │ ┌────▼─────┐ │  │ ┌────────▼─────────┐ │    │
-│  │ │ Service  │ │  │ │ Service  │ │  │ │ Simulado Service │ │    │
-│  │ │(Lógica)  │ │  │ │(Lógica)  │ │  │ │  + Resilience4j  │ │    │
-│  │ └────┬─────┘ │  │ └────┬─────┘ │  │ └──────────────────┘ │    │
-│  │      │       │  │      │       │  │                      │    │
-│  │ ┌────▼─────┐ │  │ ┌────▼─────┐ │  │                      │    │
-│  │ │Repository│ │  │ │Repository│ │  │                      │    │
-│  │ │   (DB)   │ │  │ │   (DB)   │ │  │                      │    │
-│  │ └──────────┘ │  │ └──────────┘ │  │                      │    │
-│  └──────┬───────┘  └──────┬───────┘  └──────────────────────┘    │
-│         │                  │                                       │
-│         └──────────────────┴──────────────────┐                   │
-│                                                │                   │
-│  ┌─────────────────────────────────────────────▼────────────────┐ │
-│  │              INFRAESTRUTURA (SHARED)                         │ │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌────────────────────┐  │ │
-│  │  │ Idempotência │ │   Auditoria  │ │  Outbox Pattern    │  │ │
-│  │  └──────────────┘ └──────────────┘ └────────────────────┘  │ │
-│  │  ┌──────────────┐ ┌──────────────┐ ┌────────────────────┐  │ │
-│  │  │    Configs   │ │  Exceptions  │ │  Locks Distribuídos│  │ │
-│  │  └──────────────┘ └──────────────┘ └────────────────────┘  │ │
-│  └─────────────────────────────────────────────────────────────┘ │
-└─────────────────────────┬──────────────────────────────────────────┘
-                          │
-         ┌────────────────┼────────────────┐
-         │                │                │
-    ┌────▼─────┐   ┌──────▼───┐   ┌───────▼────┐
-    │PostgreSQL│   │  Redis   │   │   Kafka    │
-    │ (Dados)  │   │ (Cache/  │   │ (Eventos)  │
-    │          │   │  Locks)  │   │            │
-    └──────────┘   └──────────┘   └────────────┘
-```
+## 🏗️ **Arquitetura Monolito Modular**
 
 ### **Por que Monolito Modular?**
 
@@ -173,763 +102,9 @@ Este projeto adota a arquitetura **Modular Monolith** (Monolito Modular), que co
 
 **Decisão**: Começar com Monolito Modular e migrar módulos específicos para microserviços conforme necessidade de escala.
 
-### **Evolução: Monolito → Microserviços**
-
-```
-FASE 1: MONOLITO MODULAR (ATUAL)          FASE 2: HÍBRIDO                    FASE 3: MICROSERVIÇOS
-┌─────────────────────────┐                ┌──────────────┐                   ┌──────────────┐
-│    MONOLITO (JAR)       │                │  MONOLITO    │                   │  Gateway     │
-│  ┌────────┐ ┌────────┐  │                │ ┌──────────┐ │                   └──────┬───────┘
-│  │Pagamen.│ │Estorno │  │                │ │Pagamento │ │                          │
-│  │Service │ │Service │  │   ────────►    │ │ Service  │ │    ────────►      ┌──────┼───────┐
-│  └────────┘ └────────┘  │                │ └──────────┘ │                   │      │       │
-│  ┌────────────────────┐  │                └──────┬───────┘           ┌───────▼──┐ ┌─▼──────────┐
-│  │ Adquirente Service │  │                       │                   │Pagamento │ │  Estorno   │
-│  └────────────────────┘  │                       │ HTTP              │ Service  │ │  Service   │
-└───────────┬───────────────┘                       │                   │          │ │            │
-            │                                ┌──────▼────────┐          │ (Port    │ │ (Port      │
-     ┌──────▼──────┐                         │  Adquirente   │          │  8081)   │ │  8082)     │
-     │ PostgreSQL  │                         │  Service      │          └──────────┘ └────────────┘
-     │   (Shared)  │                         │  (Separado)   │                 │            │
-     └─────────────┘                         │  (Port 8082)  │          ┌──────▼────────────▼──────┐
-                                             └───────────────┘          │  PostgreSQL (Separados) │
-✅ Deploy simples                            ⚠️ Escala específica        └─────────────────────────┘
-✅ Latência baixa                            ✅ Módulo crítico isolado   ✅ Escala independente
-⚠️ Escala vertical                           ⚠️ 2 deploys gerenciar      ✅ Times autônomos
-                                                                         ⚠️ Complexidade operacional
-```
-
-### **Arquitetura Geral (Simplificada)**
-
-```
-┌─────────────┐
-│   Cliente   │
-└──────┬──────┘
-       │ HTTP REST
-       ▼
-┌──────────────────────────────────────────────────────────┐
-│          API REST (Spring Boot)                          │
-│  ┌────────────┐  ┌────────────┐  ┌──────────────────┐  │
-│  │ Controller │→ │  Service   │→ │   Repository     │  │
-│  └────────────┘  └────────────┘  └──────────────────┘  │
-│         │              │                    │            │
-│         ▼              ▼                    ▼            │
-│  ┌──────────────────────────────────────────────────┐  │
-│  │        Infraestrutura (Cross-cutting)            │  │
-│  │  • Idempotência  • Auditoria  • Locks  • Outbox │  │
-│  └──────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
-       │                │                │
-       ▼                ▼                ▼
-┌────────────┐   ┌──────────┐    ┌──────────────┐
-│ PostgreSQL │   │  Redis   │    │    Kafka     │
-│  (Dados)   │   │ (Cache/  │    │ (Eventos)    │
-│            │   │  Locks)  │    │              │
-└────────────┘   └──────────┘    └──────────────┘
-                                        │
-                                        ▼
-                            ┌──────────────────────┐
-                            │  Consumidores Kafka  │
-                            │  (Outros Sistemas)   │
-                            └──────────────────────┘
-```
-
-### **Padrões Arquiteturais**
-
-#### **1. Domain-Driven Design (DDD)**
-- **Entidades**: `Pagamento`, `Estorno`
-- **Value Objects**: `StatusPagamento`, `StatusEstorno`, `TipoPagamento`
-- **Aggregates**: Cada `Pagamento` é um aggregate root que gerencia seus `Estornos`
-- **Repositories**: Abstração de persistência (`PagamentoRepository`, `EstornoRepository`)
-
-#### **2. Clean Architecture (Camadas)**
-```
-┌───────────────────────────────────────┐
-│   Presentation (Controllers)          │  ← Entrada HTTP
-├───────────────────────────────────────┤
-│   Application (Services/DTOs)         │  ← Lógica de aplicação
-├───────────────────────────────────────┤
-│   Domain (Entities/Enums)             │  ← Regras de negócio
-├───────────────────────────────────────┤
-│   Infrastructure (Config/Jobs)        │  ← Tecnologias (DB, Kafka, Redis)
-└───────────────────────────────────────┘
-```
-
-#### **3. Event-Driven Architecture**
-- **Eventos de Domínio**: `PagamentoCriadoEvento`, `EstornoStatusAlteradoEvento`
-- **Outbox Pattern**: Garante entrega via tabela transacional (`outbox_evento`)
-- **Event Listeners**: Processadores assíncronos de eventos de auditoria
-
-#### **4. Microservices Patterns**
-- **Transactional Outbox**: Garantia de consistência entre DB e Kafka
-- **Idempotency**: Prevenção de duplicação de transações
-- **Circuit Breaker**: Proteção contra falhas em cascata (adquirente)
-- **Distributed Lock**: Controle de concorrência em estornos
-
 ---
 
-## 📐 **Anatomia de um Módulo (Pattern)**
-
-### **Estrutura Padrão de Módulo**
-
-Cada módulo segue a mesma estrutura para garantir consistência e facilitar a migração para microserviços:
-
-```
-{modulo}/                              # Ex: pagamento/, estorno/, adquirente/
-├── controller/                        # 🌐 Camada de Apresentação (REST API)
-│   └── {Modulo}Controller.java       # Endpoints HTTP, validação de entrada
-│
-├── service/                           # 💼 Camada de Aplicação (Lógica de Negócio)
-│   └── {Modulo}Service.java          # Orquestração, transações, eventos
-│
-├── repository/                        # 💾 Camada de Persistência
-│   └── {Modulo}Repository.java       # Spring Data JPA
-│
-├── domain/                            # 🎯 Camada de Domínio (Core)
-│   ├── {Modulo}.java                 # Entidade JPA principal
-│   ├── Status{Modulo}.java           # Enum de status
-│   └── Tipo{Modulo}.java             # Outros enums (opcional)
-│
-├── dto/                               # 📦 Data Transfer Objects
-│   ├── {Modulo}RequestDTO.java       # Request da API
-│   ├── {Modulo}ResponseDTO.java      # Response da API
-│   └── {Modulo}Mapper.java           # Conversão Entity ↔ DTO
-│
-├── events/                            # 📨 Eventos de Domínio
-│   ├── {Modulo}CriadoEvento.java     # Evento de criação
-│   └── {Modulo}StatusAlteradoEvento.java  # Evento de mudança de status
-│
-└── exception/                         # ⚠️ Exceções específicas do módulo
-    └── {Modulo}Exception.java        # Exceções customizadas (opcional)
-```
-
-### **Exemplo Prático: Módulo `pagamento/`**
-
-#### **1. Controller** (`controller/PagamentoController.java`)
-
-```java
-package br.com.sicredi.toolschallenge.pagamento.controller;
-
-import br.com.sicredi.toolschallenge.pagamento.dto.*;
-import br.com.sicredi.toolschallenge.pagamento.service.PagamentoService;
-import br.com.sicredi.toolschallenge.infra.idempotencia.annotation.Idempotente;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import javax.validation.Valid;
-
-@RestController
-@RequestMapping("/pagamentos")
-@RequiredArgsConstructor
-public class PagamentoController {
-    
-    private final PagamentoService service;
-    
-    @PostMapping
-    @Idempotente  // Interceptor automático de idempotência
-    public ResponseEntity<PagamentoResponseDTO> criar(
-        @Valid @RequestBody PagamentoRequestDTO request
-    ) {
-        PagamentoResponseDTO response = service.criarPagamento(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-    
-    @GetMapping("/{id}")
-    public ResponseEntity<PagamentoResponseDTO> buscar(@PathVariable Long id) {
-        return ResponseEntity.ok(service.buscarPorId(id));
-    }
-}
-```
-
-**Responsabilidades**:
-- ✅ Receber requisições HTTP
-- ✅ Validar entrada (`@Valid`)
-- ✅ Delegar para Service
-- ✅ Retornar status HTTP correto
-- ❌ **NUNCA** ter lógica de negócio
-- ❌ **NUNCA** acessar Repository diretamente
-
-#### **2. Service** (`service/PagamentoService.java`)
-
-```java
-package br.com.sicredi.toolschallenge.pagamento.service;
-
-import br.com.sicredi.toolschallenge.pagamento.domain.Pagamento;
-import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
-import br.com.sicredi.toolschallenge.pagamento.dto.*;
-import br.com.sicredi.toolschallenge.pagamento.events.*;
-import br.com.sicredi.toolschallenge.pagamento.repository.PagamentoRepository;
-import br.com.sicredi.toolschallenge.adquirente.service.AdquirenteService;
-import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoRequest;
-import br.com.sicredi.toolschallenge.infra.outbox.service.OutboxService;
-import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-@Service
-@RequiredArgsConstructor
-@Slf4j
-public class PagamentoService {
-    
-    private final PagamentoRepository repository;
-    private final OutboxService outboxService;
-    private final AdquirenteService adquirenteService;  // Comunicação entre módulos
-    
-    @Transactional
-    public PagamentoResponseDTO criarPagamento(PagamentoRequestDTO dto) {
-        log.info("Criando pagamento: {}", dto.getDescricao());
-        
-        // 1. Converter DTO → Entity
-        Pagamento pagamento = PagamentoMapper.toEntity(dto);
-        pagamento.setStatus(StatusPagamento.PENDENTE);
-        
-        // 2. Autorizar com adquirente (via módulo separado)
-        AutorizacaoRequest autorizacaoReq = new AutorizacaoRequest(
-            "1234567890123456", "123", "12/2025", 
-            dto.getValor(), dto.getDescricao()
-        );
-        var autorizacao = adquirenteService.autorizarPagamento(autorizacaoReq);
-        
-        // 3. Atualizar status baseado na autorização
-        if (autorizacao.autorizado()) {
-            pagamento.setStatus(StatusPagamento.PROCESSADO);
-            pagamento.setNsu(autorizacao.nsu());
-            pagamento.setCodigoAutorizacao(autorizacao.codigoAutorizacao());
-        } else if (autorizacao.isPendente()) {
-            pagamento.setStatus(StatusPagamento.PENDENTE);
-        } else {
-            pagamento.setStatus(StatusPagamento.ERRO);
-        }
-        
-        // 4. Persistir
-        pagamento = repository.save(pagamento);
-        
-        // 5. Publicar evento (Outbox Pattern)
-        PagamentoCriadoEvento evento = new PagamentoCriadoEvento(pagamento);
-        outboxService.salvar("Pagamento", pagamento.getId(), evento);
-        
-        log.info("Pagamento criado com sucesso: ID={}, Status={}", 
-            pagamento.getId(), pagamento.getStatus());
-        
-        // 6. Converter Entity → DTO
-        return PagamentoMapper.toResponseDTO(pagamento);
-    }
-    
-    public PagamentoResponseDTO buscarPorId(Long id) {
-        Pagamento pagamento = repository.findById(id)
-            .orElseThrow(() -> new RecursoNaoEncontradoException(
-                "Pagamento não encontrado: " + id
-            ));
-        return PagamentoMapper.toResponseDTO(pagamento);
-    }
-}
-```
-
-**Responsabilidades**:
-- ✅ Lógica de negócio e orquestração
-- ✅ Gerenciar transações (`@Transactional`)
-- ✅ Converter DTOs ↔ Entities
-- ✅ Publicar eventos de domínio
-- ✅ Comunicar com outros módulos via DTOs
-- ❌ **NUNCA** retornar entidades JPA para Controller
-- ❌ **NUNCA** receber HttpServletRequest/Response
-
-#### **3. Repository** (`repository/PagamentoRepository.java`)
-
-```java
-package br.com.sicredi.toolschallenge.pagamento.repository;
-
-import br.com.sicredi.toolschallenge.pagamento.domain.Pagamento;
-import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.stereotype.Repository;
-import java.util.List;
-import java.util.Optional;
-
-@Repository
-public interface PagamentoRepository extends JpaRepository<Pagamento, Long> {
-    
-    // Queries derivadas do nome do método
-    List<Pagamento> findByStatus(StatusPagamento status);
-    
-    Optional<Pagamento> findByNsu(String nsu);
-    
-    // Query customizada (JPQL)
-    @Query("SELECT p FROM Pagamento p WHERE p.status = :status " +
-           "AND p.dataCriacao >= CURRENT_DATE")
-    List<Pagamento> buscarPagamentosHoje(StatusPagamento status);
-}
-```
-
-**Responsabilidades**:
-- ✅ Abstração de acesso ao banco
-- ✅ Queries customizadas (JPQL ou @Query)
-- ❌ **NUNCA** ter lógica de negócio
-
-#### **4. Domain** (`domain/Pagamento.java`)
-
-```java
-package br.com.sicredi.toolschallenge.pagamento.domain;
-
-import jakarta.persistence.*;
-import lombok.*;
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-
-@Entity
-@Table(name = "pagamento", indexes = {
-    @Index(name = "idx_pagamento_status", columnList = "status"),
-    @Index(name = "idx_pagamento_nsu", columnList = "nsu")
-})
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class Pagamento {
-    
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    
-    @Column(nullable = false)
-    private String descricao;
-    
-    @Column(nullable = false, precision = 19, scale = 2)
-    private BigDecimal valor;
-    
-    @Enumerated(EnumType.STRING)
-    @Column(name = "tipo_pagamento", nullable = false, length = 20)
-    private TipoPagamento tipoPagamento;
-    
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private StatusPagamento status;
-    
-    @Column(length = 50)
-    private String nsu;
-    
-    @Column(name = "codigo_autorizacao", length = 50)
-    private String codigoAutorizacao;
-    
-    @Column(name = "data_criacao", nullable = false, updatable = false)
-    private LocalDateTime dataCriacao;
-    
-    @Column(name = "data_atualizacao")
-    private LocalDateTime dataAtualizacao;
-    
-    @PrePersist
-    protected void onCreate() {
-        dataCriacao = LocalDateTime.now();
-    }
-    
-    @PreUpdate
-    protected void onUpdate() {
-        dataAtualizacao = LocalDateTime.now();
-    }
-}
-```
-
-**Responsabilidades**:
-- ✅ Representar o modelo de domínio
-- ✅ Mapeamento JPA
-- ✅ Validações de domínio (via métodos de negócio)
-- ❌ **NUNCA** ser exposta diretamente na API (usar DTOs)
-
-#### **5. DTOs** (`dto/`)
-
-**Request DTO**:
-```java
-package br.com.sicredi.toolschallenge.pagamento.dto;
-
-import br.com.sicredi.toolschallenge.pagamento.domain.TipoPagamento;
-import jakarta.validation.constraints.*;
-import lombok.*;
-import java.math.BigDecimal;
-
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class PagamentoRequestDTO {
-    
-    @NotBlank(message = "Descrição é obrigatória")
-    @Size(max = 255, message = "Descrição deve ter no máximo 255 caracteres")
-    private String descricao;
-    
-    @NotNull(message = "Valor é obrigatório")
-    @DecimalMin(value = "0.01", message = "Valor mínimo é R$ 0,01")
-    private BigDecimal valor;
-    
-    @NotNull(message = "Tipo de pagamento é obrigatório")
-    private TipoPagamento tipoPagamento;
-}
-```
-
-**Response DTO**:
-```java
-package br.com.sicredi.toolschallenge.pagamento.dto;
-
-import br.com.sicredi.toolschallenge.pagamento.domain.*;
-import lombok.*;
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class PagamentoResponseDTO {
-    private Long id;
-    private String descricao;
-    private BigDecimal valor;
-    private TipoPagamento tipoPagamento;
-    private StatusPagamento status;
-    private String nsu;
-    private String codigoAutorizacao;
-    private LocalDateTime dataCriacao;
-    private LocalDateTime dataAtualizacao;
-}
-```
-
-**Mapper**:
-```java
-package br.com.sicredi.toolschallenge.pagamento.dto;
-
-import br.com.sicredi.toolschallenge.pagamento.domain.Pagamento;
-
-public class PagamentoMapper {
-    
-    public static Pagamento toEntity(PagamentoRequestDTO dto) {
-        return Pagamento.builder()
-            .descricao(dto.getDescricao())
-            .valor(dto.getValor())
-            .tipoPagamento(dto.getTipoPagamento())
-            .build();
-    }
-    
-    public static PagamentoResponseDTO toResponseDTO(Pagamento entity) {
-        return PagamentoResponseDTO.builder()
-            .id(entity.getId())
-            .descricao(entity.getDescricao())
-            .valor(entity.getValor())
-            .tipoPagamento(entity.getTipoPagamento())
-            .status(entity.getStatus())
-            .nsu(entity.getNsu())
-            .codigoAutorizacao(entity.getCodigoAutorizacao())
-            .dataCriacao(entity.getDataCriacao())
-            .dataAtualizacao(entity.getDataAtualizacao())
-            .build();
-    }
-}
-```
-
-#### **6. Events** (`events/`)
-
-```java
-package br.com.sicredi.toolschallenge.pagamento.events;
-
-import br.com.sicredi.toolschallenge.pagamento.domain.Pagamento;
-import lombok.*;
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class PagamentoCriadoEvento {
-    private String tipoEvento = "PAGAMENTO_CRIADO";
-    private LocalDateTime timestamp = LocalDateTime.now();
-    private Long agregadoId;
-    private DadosPagamento dados;
-    
-    public PagamentoCriadoEvento(Pagamento pagamento) {
-        this.agregadoId = pagamento.getId();
-        this.dados = new DadosPagamento(
-            pagamento.getId(),
-            pagamento.getDescricao(),
-            pagamento.getValor(),
-            pagamento.getStatus().name(),
-            pagamento.getNsu(),
-            pagamento.getCodigoAutorizacao()
-        );
-    }
-    
-    @Data
-    @AllArgsConstructor
-    public static class DadosPagamento {
-        private Long id;
-        private String descricao;
-        private BigDecimal valor;
-        private String status;
-        private String nsu;
-        private String codigoAutorizacao;
-    }
-}
-```
-
----
-
-## 🔧 **Pasta `shared/` - Componentes Compartilhados**
-
-A pasta `shared/` contém componentes **transversais** (cross-cutting concerns) que são usados por **todos os módulos**. Estes componentes são **stateless** e **genéricos**.
-
-### **Estrutura `shared/`**
-
-```
-shared/
-├── config/                            # ⚙️ Configurações Globais
-│   ├── KafkaConfig.java              # Configuração de producers/consumers Kafka
-│   ├── RedisConfig.java              # Configuração do Redis (cache)
-│   ├── RedissonConfig.java           # Configuração Redisson (locks distribuídos)
-│   └── IdempotenciaConfig.java       # Registra interceptors de idempotência
-│
-└── exception/                         # ⚠️ Exceções Globais
-    ├── GlobalExceptionHandler.java   # @ControllerAdvice - trata todas exceções
-    ├── NegocioException.java         # Exceção genérica de regra de negócio
-    ├── RecursoNaoEncontradoException.java  # 404 Not Found
-    └── ErroResposta.java             # DTO padrão de erro
-
-```
-
-### **⚠️ Regra: Localização de Exceptions**
-
-**Princípio**: Exceptions **genéricas** devem estar em `shared/exception/`. Apenas crie exceptions **específicas de módulo** quando houver:
-
-1. ✅ **Lógica de negócio única** do domínio
-2. ✅ **Tratamento HTTP diferenciado** específico
-3. ✅ **Comportamento customizado** que não se aplica a outros módulos
-
-**Exemplos**:
-
-```java
-// ❌ ERRADO: Exception genérica no módulo
-// adquirente/exception/AdquirenteIndisponivelException.java
-public class AdquirenteIndisponivelException extends RuntimeException {
-    // Representa "serviço indisponível" - conceito genérico!
-}
-
-// ✅ CORRETO: Exception genérica em shared/
-// shared/exception/ServicoIndisponivelException.java
-public class ServicoIndisponivelException extends RuntimeException {
-    // Reutilizável por QUALQUER módulo que integre com serviços externos
-    // Retorna HTTP 503 (Service Unavailable)
-}
-
-// ✅ CORRETO: Exception específica de módulo (quando justificado)
-// pagamento/exception/LimiteCredito ExcedidoException.java
-public class LimiteCreditoExcedidoException extends NegocioException {
-    private BigDecimal limiteDisponivel;
-    private BigDecimal valorSolicitado;
-    
-    // Lógica específica do domínio "pagamento"
-    public BigDecimal calcularDiferenca() {
-        return valorSolicitado.subtract(limiteDisponivel);
-    }
-}
-```
-
-**Checklist antes de criar exception em módulo**:
-- [ ] Esta exception é **específica deste domínio**?
-- [ ] Ela tem **lógica de negócio** que não se aplica a outros módulos?
-- [ ] O tratamento HTTP é **diferente** das exceptions genéricas?
-- [ ] Se virar microserviço, ainda faria sentido tê-la internamente?
-
-Se **todas as respostas forem NÃO**, crie em `shared/exception/`.
-
----
-
-### **Exemplo: `shared/config/KafkaConfig.java`**
-
-```java
-package br.com.sicredi.toolschallenge.shared.config;
-
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.serialization.StringSerializer;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.kafka.core.*;
-import org.springframework.kafka.support.serializer.JsonSerializer;
-import java.util.HashMap;
-import java.util.Map;
-
-@Configuration
-public class KafkaConfig {
-    
-    @Bean
-    public ProducerFactory<String, Object> producerFactory() {
-        Map<String, Object> config = new HashMap<>();
-        config.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
-        config.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        config.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
-        config.put(ProducerConfig.ACKS_CONFIG, "all");  // Garantia de escrita
-        config.put(ProducerConfig.RETRIES_CONFIG, 3);
-        return new DefaultKafkaProducerFactory<>(config);
-    }
-    
-    @Bean
-    public KafkaTemplate<String, Object> kafkaTemplate() {
-        return new KafkaTemplate<>(producerFactory());
-    }
-}
-```
-
-### **Exemplo: `shared/exception/GlobalExceptionHandler.java`**
-
-```java
-package br.com.sicredi.toolschallenge.shared.exception;
-
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.*;
-import java.time.LocalDateTime;
-import java.util.stream.Collectors;
-
-@RestControllerAdvice
-@Slf4j
-public class GlobalExceptionHandler {
-    
-    @ExceptionHandler(RecursoNaoEncontradoException.class)
-    public ResponseEntity<ErroResposta> handleNotFound(RecursoNaoEncontradoException ex) {
-        log.warn("Recurso não encontrado: {}", ex.getMessage());
-        ErroResposta erro = new ErroResposta(
-            HttpStatus.NOT_FOUND.value(),
-            ex.getMessage(),
-            LocalDateTime.now()
-        );
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(erro);
-    }
-    
-    @ExceptionHandler(NegocioException.class)
-    public ResponseEntity<ErroResposta> handleNegocio(NegocioException ex) {
-        log.warn("Erro de negócio: {}", ex.getMessage());
-        ErroResposta erro = new ErroResposta(
-            HttpStatus.UNPROCESSABLE_ENTITY.value(),
-            ex.getMessage(),
-            LocalDateTime.now()
-        );
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(erro);
-    }
-    
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErroResposta> handleValidation(
-        MethodArgumentNotValidException ex
-    ) {
-        String mensagem = ex.getBindingResult().getFieldErrors().stream()
-            .map(e -> e.getField() + ": " + e.getDefaultMessage())
-            .collect(Collectors.joining(", "));
-        
-        log.warn("Erro de validação: {}", mensagem);
-        ErroResposta erro = new ErroResposta(
-            HttpStatus.BAD_REQUEST.value(),
-            mensagem,
-            LocalDateTime.now()
-        );
-        return ResponseEntity.badRequest().body(erro);
-    }
-    
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErroResposta> handleGeneric(Exception ex) {
-        log.error("Erro inesperado", ex);
-        ErroResposta erro = new ErroResposta(
-            HttpStatus.INTERNAL_SERVER_ERROR.value(),
-            "Erro interno do servidor",
-            LocalDateTime.now()
-        );
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(erro);
-    }
-}
-```
-
-### **Exemplo: `shared/exception/ErroResposta.java`**
-
-```java
-package br.com.sicredi.toolschallenge.shared.exception;
-
-import lombok.*;
-import java.time.LocalDateTime;
-
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class ErroResposta {
-    private Integer status;
-    private String mensagem;
-    private LocalDateTime timestamp;
-}
-```
-
----
-
-## ✅ **Checklist para Criar um Novo Módulo**
-
-Ao criar um novo módulo (ex: `notificacao/`, `relatorio/`), siga este checklist:
-
-- [ ] **1. Criar estrutura de pastas**:
-  ```
-  {modulo}/
-  ├── controller/
-  ├── service/
-  ├── repository/
-  ├── domain/
-  ├── dto/
-  ├── events/
-  └── exception/ (se necessário)
-  ```
-
-- [ ] **2. Criar entidade JPA** (`domain/{Modulo}.java`):
-  - Usar `@Entity`, `@Table`, `@Id`, `@GeneratedValue`
-  - Adicionar índices (`@Index`) para campos consultados
-  - Implementar `@PrePersist` e `@PreUpdate` para timestamps
-
-- [ ] **3. Criar enums de domínio** (`domain/Status{Modulo}.java`):
-  - Status do ciclo de vida da entidade
-  - Outros value objects necessários
-
-- [ ] **4. Criar Repository** (`repository/{Modulo}Repository.java`):
-  - Extend `JpaRepository<{Modulo}, Long>`
-  - Adicionar queries customizadas se necessário
-
-- [ ] **5. Criar DTOs** (`dto/`):
-  - Request DTO com validações (`@NotNull`, `@NotBlank`, etc)
-  - Response DTO (pode expor mais campos que Request)
-  - Mapper com métodos `toEntity()` e `toResponseDTO()`
-
-- [ ] **6. Criar Service** (`service/{Modulo}Service.java`):
-  - Anotar com `@Service`, `@RequiredArgsConstructor`, `@Slf4j`
-  - Usar `@Transactional` em métodos que modificam dados
-  - Publicar eventos via `OutboxService`
-  - **Nunca** injetar `Repository` ou `Service` de outro módulo diretamente
-
-- [ ] **7. Criar Controller** (`controller/{Modulo}Controller.java`):
-  - Anotar com `@RestController`, `@RequestMapping`
-  - Usar `@Idempotente` em POST/PUT
-  - Validar entrada com `@Valid`
-  - Retornar status HTTP corretos (201, 200, 404, etc)
-
-- [ ] **8. Criar Eventos de Domínio** (`events/`):
-  - Evento de criação (`{Modulo}CriadoEvento`)
-  - Evento de mudança de status (`{Modulo}StatusAlteradoEvento`)
-  - Incluir timestamp e dados relevantes
-
-- [ ] **9. Criar Migração Flyway** (`resources/db/migration/V{n}__criar_tabela_{modulo}.sql`):
-  - DDL completo da tabela
-  - Índices necessários
-  - Constraints (PK, NOT NULL, etc)
-
-- [ ] **10. Criar Testes**:
-  - Testes unitários do Service (`{Modulo}ServiceTest.java`)
-  - Testes de integração (`{Modulo}IntegrationTest.java`)
-
----
-
-## 🎖️ **Regras de Ouro para Monolito Modular**
+## 🎖️ **Regras Fundamentais**
 
 ### **As 10 Regras que NÃO Podem Ser Quebradas**
 
@@ -1017,182 +192,113 @@ throw new NegocioException("Pagamento já foi estornado");
 
 ---
 
-### **⚠️ Princípio KISS: Evite Complexidade Desnecessária**
+## 📐 **Anatomia de um Módulo**
 
-**Mantra**: *"O código que não existe é o código que não tem bugs"*
+### **Estrutura Padrão de Módulo**
 
-#### **❌ Anti-Pattern: Over-Engineering**
+Cada módulo segue a mesma estrutura para garantir consistência e facilitar a migração para microserviços:
 
-**Exemplo Real do Projeto** (o que NÃO fazer):
-
-```java
-// ❌ ERRADO: Criar annotation customizada desnecessária
-@Target(ElementType.FIELD)
-@Retention(RetentionPolicy.RUNTIME)
-@Constraint(validatedBy = ValorPositivoValidator.class)
-public @interface ValorPositivo {
-    String message() default "Valor deve ser positivo";
-    Class<?>[] groups() default {};
-    Class<? extends Payload>[] payload() default {};
-}
-
-public class ValorPositivoValidator implements ConstraintValidator<ValorPositivo, BigDecimal> {
-    @Override
-    public boolean isValid(BigDecimal valor, ConstraintValidatorContext context) {
-        return valor != null && valor.compareTo(BigDecimal.ZERO) > 0;
-    }
-}
-
-// Uso na classe
-public class PagamentoRequestDTO {
-    @ValorPositivo  // ❌ Annotation customizada desnecessária!
-    private BigDecimal valor;
-}
-
-// ✅ CORRETO: Usar Bean Validation padrão
-public class PagamentoRequestDTO {
-    @NotNull(message = "Valor é obrigatório")
-    @DecimalMin(value = "0.01", message = "Valor mínimo é R$ 0,01")
-    private BigDecimal valor;  // ✅ Resolve o mesmo problema com código padrão!
-}
+```
+{modulo}/                              # Ex: pagamento/, estorno/, adquirente/
+├── controller/                        # 🌐 Camada de Apresentação (REST API)
+│   └── {Modulo}Controller.java       # Endpoints HTTP, validação de entrada
+│
+├── service/                           # 💼 Camada de Aplicação (Lógica de Negócio)
+│   └── {Modulo}Service.java          # Orquestração, transações, eventos
+│
+├── repository/                        # 💾 Camada de Persistência
+│   └── {Modulo}Repository.java       # Spring Data JPA
+│
+├── domain/                            # 🎯 Camada de Domínio (Core)
+│   ├── {Modulo}.java                 # Entidade JPA principal
+│   ├── Status{Modulo}.java           # Enum de status
+│   └── Tipo{Modulo}.java             # Outros enums (opcional)
+│
+├── dto/                               # 📦 Data Transfer Objects
+│   ├── {Modulo}RequestDTO.java       # Request da API
+│   ├── {Modulo}ResponseDTO.java      # Response da API
+│   └── {Modulo}Mapper.java           # Conversão Entity ↔ DTO
+│
+├── events/                            # 📨 Eventos de Domínio
+│   ├── {Modulo}CriadoEvento.java     # Evento de criação
+│   └── {Modulo}StatusAlteradoEvento.java  # Evento de mudança de status
+│
+└── exception/                         # ⚠️ Exceções específicas do módulo
+    └── {Modulo}Exception.java        # Exceções customizadas (opcional)
 ```
 
-**Por que está errado?**
-- ❌ Criou 15+ linhas de código customizado
-- ❌ Mais código para manter e testar
-- ❌ Outros desenvolvedores precisam aprender sua API customizada
-- ✅ Bean Validation já resolve isso em 1 linha
+### **Responsabilidades por Camada**
 
-#### **Exemplos de Simplicidade vs Complexidade**
+**Controller**:
+- ✅ Receber requisições HTTP
+- ✅ Validar entrada (`@Valid`)
+- ✅ Delegar para Service
+- ✅ Retornar status HTTP correto
+- ❌ **NUNCA** ter lógica de negócio
+- ❌ **NUNCA** acessar Repository diretamente
 
-**1. Validação de CPF**
+**Service**:
+- ✅ Lógica de negócio e orquestração
+- ✅ Gerenciar transações (`@Transactional`)
+- ✅ Converter DTOs ↔ Entities
+- ✅ Publicar eventos de domínio
+- ✅ Comunicar com outros módulos via DTOs
+- ❌ **NUNCA** retornar entidades JPA para Controller
+- ❌ **NUNCA** receber HttpServletRequest/Response
 
-```java
-// ❌ COMPLEXO: Criar annotation customizada
-@Cpf
-private String cpf;
+**Repository**:
+- ✅ Abstração de acesso ao banco
+- ✅ Queries customizadas (JPQL ou @Query)
+- ❌ **NUNCA** ter lógica de negócio
 
-// ⚠️ ACEITÁVEL: Se realmente usado em muitos lugares
-@Pattern(regexp = "\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}", 
-         message = "CPF inválido")
-private String cpf;
-
-// ✅ MAIS SIMPLES: Validar no Service (se usado em 1-2 lugares)
-public void criar(PagamentoRequestDTO dto) {
-    if (!validarCpf(dto.getCpf())) {
-        throw new NegocioException("CPF inválido");
-    }
-}
-```
-
-**2. Formatação de Datas**
-
-```java
-// ❌ COMPLEXO: Criar classe DateFormatter customizada
-public class CustomDateFormatter {
-    public static String format(LocalDateTime date, String pattern) { ... }
-}
-
-// ✅ SIMPLES: Usar Java padrão
-LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
-```
-
-**3. Conversão de Entidade → DTO**
-
-```java
-// ❌ COMPLEXO: Usar MapStruct para 3 campos
-@Mapper
-public interface PagamentoMapper {
-    PagamentoResponseDTO toDto(Pagamento entity);
-}
-
-// ✅ SIMPLES: Método manual para casos triviais
-public static PagamentoResponseDTO toDto(Pagamento entity) {
-    return PagamentoResponseDTO.builder()
-        .id(entity.getId())
-        .valor(entity.getValor())
-        .status(entity.getStatus())
-        .build();
-}
-
-// ⚠️ MapStruct é útil quando há MUITOS campos (15+) ou lógica complexa
-```
-
-#### **Checklist: "Preciso Mesmo Criar Isso?"**
-
-Antes de criar qualquer abstração customizada, pergunte:
-
-- [ ] **Já existe no Spring/Java?** (99% das vezes, sim)
-- [ ] **Bean Validation resolve?** (`@NotNull`, `@Size`, `@Pattern`, `@DecimalMin`, etc)
-- [ ] **Será usado em 3+ lugares?** (Se não, não crie abstração)
-- [ ] **Alguém da equipe vai entender isso facilmente?** (Se não, simplifique)
-- [ ] **Posso resolver com 1 linha de código padrão?** (Se sim, não crie classe customizada)
-
-#### **Regra dos 3 Usos**
-
-> **Só crie abstração customizada após usar a mesma lógica em 3 lugares diferentes.**
-
-```java
-// 1º uso: Copie e cole (sim, é OK inicialmente)
-if (valor.compareTo(BigDecimal.ZERO) <= 0) { ... }
-
-// 2º uso: Ainda copie e cole
-if (valor.compareTo(BigDecimal.ZERO) <= 0) { ... }
-
-// 3º uso: AGORA extraia para método/classe
-private boolean valorInvalido(BigDecimal valor) {
-    return valor.compareTo(BigDecimal.ZERO) <= 0;
-}
-```
-
-**Benefícios**:
-- ✅ Evita abstrações prematuras
-- ✅ Só cria quando há necessidade real
-- ✅ Menos código = menos bugs
+**Domain**:
+- ✅ Representar o modelo de domínio
+- ✅ Mapeamento JPA
+- ✅ Validações de domínio (via métodos de negócio)
+- ❌ **NUNCA** ser exposta diretamente na API (usar DTOs)
 
 ---
 
-### **Checklist de Code Review**
+## 🔧 **Pasta `shared/`**
 
-Ao revisar um Pull Request, verifique:
+A pasta `shared/` contém componentes **transversais** (cross-cutting concerns) que são usados por **todos os módulos**. Estes componentes são **stateless** e **genéricos**.
 
-**Modularização:**
-- [ ] Nenhum `import` de classes `domain` de outros módulos?
-- [ ] Migrations Flyway sem FKs entre módulos?
-- [ ] Controller retorna DTOs (não entidades)?
+### **Estrutura `shared/`**
 
-**Transações e Eventos:**
-- [ ] Service tem `@Transactional` onde necessário?
-- [ ] Eventos de domínio publicados via Outbox?
+```
+shared/
+├── config/                            # ⚙️ Configurações Globais
+│   ├── KafkaConfig.java              # Configuração de producers/consumers Kafka
+│   ├── RedisConfig.java              # Configuração do Redis (cache)
+│   ├── RedissonConfig.java           # Configuração Redisson (locks distribuídos)
+│   └── IdempotenciaConfig.java       # Registra interceptors de idempotência
+│
+└── exception/                         # ⚠️ Exceções Globais
+    ├── GlobalExceptionHandler.java   # @ControllerAdvice - trata todas exceções
+    ├── NegocioException.java         # Exceção genérica de regra de negócio
+    ├── RecursoNaoEncontradoException.java  # 404 Not Found
+    └── ErroResposta.java             # DTO padrão de erro
+```
 
-**Validação e DTOs:**
-- [ ] DTOs têm validações (`@Valid`, `@NotNull`, etc)?
-- [ ] Validações usam **Bean Validation padrão** em vez de annotations customizadas?
-- [ ] Mapper converte corretamente Entity ↔ DTO?
+### **⚠️ Regra: Localização de Exceptions**
 
-**Simplicidade (KISS):**
-- [ ] Código é simples e direto? (Evita "código inteligente demais")
-- [ ] Usa recursos nativos do Spring/Java antes de criar código customizado?
-- [ ] Se criou abstração customizada, ela é usada em 3+ lugares?
-- [ ] Não há classes/annotations/helpers desnecessários?
+**Princípio**: Exceptions **genéricas** devem estar em `shared/exception/`. Apenas crie exceptions **específicas de módulo** quando houver:
 
-**Qualidade:**
-- [ ] Testes unitários e de integração criados?
-- [ ] Logs com nível adequado (INFO, WARN, ERROR)?
-- [ ] Tratamento de exceções adequado?
-- [ ] Código é legível para qualquer dev Java (sem "magia")?
+1. ✅ **Lógica de negócio única** do domínio
+2. ✅ **Tratamento HTTP diferenciado** específico
+3. ✅ **Comportamento customizado** que não se aplica a outros módulos
+
+**Checklist antes de criar exception em módulo**:
+- [ ] Esta exception é **específica deste domínio**?
+- [ ] Ela tem **lógica de negócio** que não se aplica a outros módulos?
+- [ ] O tratamento HTTP é **diferente** das exceptions genéricas?
+- [ ] Se virar microserviço, ainda faria sentido tê-la internamente?
+
+Se **todas as respostas forem NÃO**, crie em `shared/exception/`.
 
 ---
 
-#### **4. Microservices Patterns**
-- **Transactional Outbox**: Garantia de consistência entre DB e Kafka
-- **Idempotency**: Prevenção de duplicação de transações
-- **Circuit Breaker**: Proteção contra falhas em cascata (adquirente)
-- **Distributed Lock**: Controle de concorrência em estornos
-
----
-
-## � **Comunicação Entre Módulos**
+## 📡 **Comunicação Entre Módulos**
 
 ### **Regras de Comunicação**
 
@@ -1289,15 +395,6 @@ CREATE TABLE estorno (
 
 **Por quê?** Em microserviços, `pagamento` e `estorno` estarão em bancos diferentes.
 
-### **Padrões de Integração**
-
-| Cenário | Padrão | Exemplo |
-|---------|--------|---------|
-| **Leitura de dados de outro módulo** | ❌ Evitar / ✅ Usar eventos | Estorno precisa validar Pagamento → Evento `PagamentoCriadoEvento` já tem os dados |
-| **Ação em outro módulo (síncrona)** | ✅ Service + DTO | Pagamento autoriza com Adquirente → `adquirenteService.autorizarPagamento(dto)` |
-| **Notificar outro módulo** | ✅ Evento de domínio | Pagamento criado → Publica `PagamentoCriadoEvento` no Kafka |
-| **Validação de regra de negócio** | ✅ Dentro do próprio módulo | Validar se pagamento existe → Fazer dentro do `EstornoService` via chamada HTTP futura |
-
 ### **Migração para Microserviços**
 
 Com essa estrutura, a migração é simples:
@@ -1331,965 +428,124 @@ public class PagamentoService {
 
 ---
 
-## �📁 **Estrutura de Pastas**
+## ✅ **Checklist de Novo Módulo**
 
-```
-ToolsChallenge/
-│
-├── .github/
-│   └── instructions/
-│       └── instructions.md          # 📄 Esta documentação
-│
-├── docker/
-│   ├── postgres/init.sql            # Scripts iniciais do PostgreSQL
-│   ├── kafka/                       # Configurações do Kafka
-│   └── redis/                       # Configurações do Redis
-│
-├── docs/
-│   ├── AUDITORIA.md                 # Documentação do sistema de auditoria
-│   ├── LOCK_DISTRIBUIDO.md          # Implementação de locks distribuídos
-│   ├── TESTES_IDEMPOTENCIA.md       # Testes de idempotência
-│   └── TESTES_OUTBOX_PATTERN.md     # Testes do Outbox Pattern
-│
-├── src/
-│   ├── main/
-│   │   ├── java/br/com/sicredi/toolschallenge/
-│   │   │   │
-│   │   │   ├── adquirente/                    # 🏦 Módulo Adquirente (Resilience4j)
-│   │   │   │   ├── dto/
-│   │   │   │   │   ├── AutorizacaoRequest.java
-│   │   │   │   │   └── AutorizacaoResponse.java
-│   │   │   │   ├── exception/
-│   │   │   │   │   └── AdquirenteIndisponivelException.java
-│   │   │   │   └── service/
-│   │   │   │       ├── AdquirenteService.java          # Circuit Breaker + Retry + Bulkhead
-│   │   │   │       └── AdquirenteSimuladoService.java  # Simulador com chaos engineering
-│   │   │   │
-│   │   │   ├── pagamento/                     # 💳 Módulo Pagamento
-│   │   │   │   ├── controller/
-│   │   │   │   │   └── PagamentoController.java        # Endpoints REST
-│   │   │   │   ├── domain/
-│   │   │   │   │   ├── Pagamento.java                  # Entidade JPA
-│   │   │   │   │   ├── StatusPagamento.java            # Enum (PENDENTE, PROCESSADO, ERRO)
-│   │   │   │   │   └── TipoPagamento.java              # Enum (PIX, CARTAO_CREDITO, etc)
-│   │   │   │   ├── dto/
-│   │   │   │   │   ├── PagamentoRequestDTO.java
-│   │   │   │   │   ├── PagamentoResponseDTO.java
-│   │   │   │   │   └── PagamentoMapper.java            # MapStruct mapper
-│   │   │   │   ├── events/
-│   │   │   │   │   ├── PagamentoCriadoEvento.java
-│   │   │   │   │   └── PagamentoStatusAlteradoEvento.java
-│   │   │   │   ├── repository/
-│   │   │   │   │   └── PagamentoRepository.java        # Spring Data JPA
-│   │   │   │   └── service/
-│   │   │   │       └── PagamentoService.java           # Lógica de negócio
-│   │   │   │
-│   │   │   ├── estorno/                       # 🔄 Módulo Estorno
-│   │   │   │   ├── controller/
-│   │   │   │   │   └── EstornoController.java
-│   │   │   │   ├── domain/
-│   │   │   │   │   ├── Estorno.java
-│   │   │   │   │   └── StatusEstorno.java
-│   │   │   │   ├── dto/
-│   │   │   │   │   ├── EstornoRequestDTO.java
-│   │   │   │   │   ├── EstornoResponseDTO.java
-│   │   │   │   │   └── EstornoMapper.java
-│   │   │   │   ├── events/
-│   │   │   │   │   ├── EstornoCriadoEvento.java
-│   │   │   │   │   └── EstornoStatusAlteradoEvento.java
-│   │   │   │   ├── repository/
-│   │   │   │   │   └── EstornoRepository.java
-│   │   │   │   └── service/
-│   │   │   │       └── EstornoService.java             # Usa Lock Distribuído
-│   │   │   │
-│   │   │   ├── infra/                         # 🛠️ Infraestrutura (Cross-cutting)
-│   │   │   │   │
-│   │   │   │   ├── idempotencia/              # Idempotência
-│   │   │   │   │   ├── annotation/
-│   │   │   │   │   │   └── Idempotente.java            # @Idempotente anotação
-│   │   │   │   │   ├── interceptor/
-│   │   │   │   │   │   ├── IdempotenciaInterceptor.java
-│   │   │   │   │   │   └── IdempotenciaResponseAdvice.java
-│   │   │   │   │   ├── job/
-│   │   │   │   │   │   └── IdempotenciaLimpezaJob.java # Limpeza automática
-│   │   │   │   │   ├── repository/
-│   │   │   │   │   │   └── IdempotenciaRepository.java
-│   │   │   │   │   ├── service/
-│   │   │   │   │   │   └── IdempotenciaService.java
-│   │   │   │   │   └── Idempotencia.java               # Entidade
-│   │   │   │   │
-│   │   │   │   ├── auditoria/                 # Auditoria de Eventos
-│   │   │   │   │   ├── listener/
-│   │   │   │   │   │   ├── PagamentoEventListener.java # Kafka listener
-│   │   │   │   │   │   └── EstornoEventListener.java
-│   │   │   │   │   ├── repository/
-│   │   │   │   │   │   └── EventoAuditoriaRepository.java
-│   │   │   │   │   ├── scheduled/
-│   │   │   │   │   │   └── AuditoriaScheduler.java     # Jobs agendados
-│   │   │   │   │   ├── service/
-│   │   │   │   │   │   └── AuditoriaService.java
-│   │   │   │   │   └── EventoAuditoria.java            # Entidade
-│   │   │   │   │
-│   │   │   │   └── outbox/                    # Outbox Pattern
-│   │   │   │       ├── publisher/
-│   │   │   │       │   └── OutboxPublisher.java        # Job que publica eventos
-│   │   │   │       ├── repository/
-│   │   │   │       │   └── OutboxRepository.java
-│   │   │   │       ├── service/
-│   │   │   │       │   └── OutboxService.java
-│   │   │   │       └── OutboxEvento.java               # Entidade transacional
-│   │   │   │
-│   │   │   ├── shared/                        # 🔧 Compartilhado
-│   │   │   │   ├── config/
-│   │   │   │   │   ├── KafkaConfig.java                # Configuração Kafka
-│   │   │   │   │   ├── RedisConfig.java                # Configuração Redis
-│   │   │   │   │   ├── RedissonConfig.java             # Redisson (Locks)
-│   │   │   │   │   └── IdempotenciaConfig.java         # Registra interceptors
-│   │   │   │   └── exception/
-│   │   │   │       ├── GlobalExceptionHandler.java     # Exception handler global
-│   │   │   │       ├── NegocioException.java
-│   │   │   │       ├── RecursoNaoEncontradoException.java
-│   │   │   │       └── ErroResposta.java               # DTO de erro
-│   │   │   │
-│   │   │   ├── security/                      # 🔐 Segurança (futura)
-│   │   │   │   └── (placeholder para autenticação)
-│   │   │   │
-│   │   │   └── ToolschallengeApplication.java # 🚀 Main class
-│   │   │
-│   │   └── resources/
-│   │       ├── application.yml                # Configuração principal
-│   │       └── db/migration/                  # Flyway migrations
-│   │           ├── V1__criar_tabela_pagamento.sql
-│   │           ├── V2__criar_tabela_estorno.sql
-│   │           ├── V3__criar_tabela_idempotencia.sql
-│   │           ├── V4__criar_tabela_outbox.sql
-│   │           └── V5__criar_tabela_auditoria.sql
-│   │
-│   └── test/
-│       └── java/br/com/sicredi/toolschallenge/
-│           ├── integration/                   # Testes de integração
-│           └── unit/                          # Testes unitários
-│
-├── docker-compose.yml                         # Infraestrutura local
-├── pom.xml                                    # Maven dependencies
-├── README.md                                  # Quickstart
-├── EXEMPLOS_API_PAGAMENTO.md                 # Exemplos de uso
-├── EXEMPLOS_API_ESTORNO.md
-└── QUICKSTART.md
-```
+Ao criar um novo módulo (ex: `notificacao/`, `relatorio/`), siga este checklist:
 
----
-
-## 🛠️ **Stack Tecnológico**
-
-### **Backend**
-| Tecnologia | Versão | Propósito |
-|-----------|--------|-----------|
-| **Java** | 17 | Linguagem base |
-| **Spring Boot** | 3.5.7 | Framework principal |
-| **Spring Data JPA** | 3.5.7 | Persistência ORM |
-| **Spring Kafka** | 3.5.7 | Mensageria |
-| **Spring Actuator** | 3.5.7 | Monitoramento |
-
-### **Persistência**
-| Tecnologia | Versão | Propósito |
-|-----------|--------|-----------|
-| **PostgreSQL** | 16 | Banco de dados principal |
-| **Flyway** | 10.x | Migrações de schema |
-| **Redis** | 7.x | Cache e locks distribuídos |
-
-### **Mensageria**
-| Tecnologia | Versão | Propósito |
-|-----------|--------|-----------|
-| **Apache Kafka** | 3.6.x | Event streaming |
-| **Spring Kafka** | 3.5.7 | Integração com Kafka |
-
-### **Resiliência**
-| Tecnologia | Versão | Propósito |
-|-----------|--------|-----------|
-| **Resilience4j** | 2.2.0 | Circuit Breaker, Retry, Bulkhead |
-| **Redisson** | 3.35.0 | Locks distribuídos |
-
-### **Observabilidade**
-| Tecnologia | Versão | Propósito |
-|-----------|--------|-----------|
-| **Micrometer** | 1.13.x | Métricas |
-| **Prometheus** | 2.x | Coleta de métricas |
-| **Springdoc OpenAPI** | 2.6.0 | Documentação Swagger |
-
-### **Build e Testes**
-| Tecnologia | Versão | Propósito |
-|-----------|--------|-----------|
-| **Maven** | 3.9.x | Build tool |
-| **JUnit 5** | 5.10.x | Testes unitários |
-| **Testcontainers** | 1.19.x | Testes de integração |
-| **Lombok** | 1.18.x | Redução de boilerplate |
-
----
-
-## 🎨 **Padrões Implementados**
-
-### **1. Idempotência**
-**Objetivo**: Garantir que requisições duplicadas não causem efeitos colaterais.
-
-**Implementação**:
-- Header `Idempotency-Key` obrigatório em `POST` e `PUT`
-- Armazenamento em Redis com TTL de 24h
-- Retorno de `409 Conflict` para duplicatas
-- Limpeza automática via job agendado
-
-**Exemplo**:
-```bash
-curl -X POST http://localhost:8080/pagamentos \
-  -H "Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000" \
-  -H "Content-Type: application/json" \
-  -d '{...}'
-```
-
-### **2. Outbox Pattern**
-**Objetivo**: Garantir consistência entre banco de dados e Kafka.
-
-**Fluxo**:
-1. Transação SQL salva `Pagamento` + `OutboxEvento` na mesma transação
-2. Job assíncrono (`OutboxPublisher`) publica eventos pendentes no Kafka
-3. Marca eventos como `PUBLICADO` após confirmação
-
-**Benefícios**:
-- ✅ At-least-once delivery garantido
-- ✅ Sem perda de eventos mesmo em crash
-- ✅ Eventual consistency
-
-### **3. Distributed Lock**
-**Objetivo**: Prevenir race conditions em operações concorrentes.
-
-**Implementação**:
-- Redisson sobre Redis
-- Lock pattern: `tryLock(5s wait, 30s lease)`
-- Watchdog automático renova lease
-- Graceful degradation se Redis indisponível
-
-**Uso**:
-```java
-@Service
-public class EstornoService {
-    
-    @Autowired(required = false)
-    private RedissonClient redissonClient;
-    
-    public void processarEstorno(Long pagamentoId) {
-        String lockKey = "estorno:pagamento:" + pagamentoId;
-        RLock lock = redissonClient.getLock(lockKey);
-        
-        if (lock.tryLock(5, 30, TimeUnit.SECONDS)) {
-            try {
-                // Lógica crítica protegida
-            } finally {
-                lock.unlock();
-            }
-        }
-    }
-}
-```
-
-### **4. Circuit Breaker (Resilience4j)**
-**Objetivo**: Proteger sistema de falhas em cascata ao chamar adquirente.
-
-**Configuração**:
-- **Threshold**: 50% de falhas abre circuito
-- **Wait Duration**: 10s em estado OPEN
-- **Half-Open**: 3 chamadas de teste
-- **Fallback**: Retorna status `PENDENTE` para reprocessamento
-
-**Estados**:
-```
-CLOSED → OPEN (50% failures) → HALF_OPEN (10s) → CLOSED (3/3 success)
-                                              ↘ OPEN (1+ failure)
-```
-
-### **5. Event Sourcing (Auditoria)**
-**Objetivo**: Rastreabilidade completa de eventos de negócio.
-
-**Eventos Capturados**:
-- `PagamentoCriadoEvento`
-- `PagamentoStatusAlteradoEvento`
-- `EstornoCriadoEvento`
-- `EstornoStatusAlteradoEvento`
-
-**Armazenamento**:
-- Tabela `evento_auditoria` com JSON completo do evento
-- Listeners Kafka processam e persistem assíncronamente
-
----
-
-## 🧩 **Módulos e Funcionalidades**
-
-### **1. Módulo Pagamento** (`pagamento/`)
-
-**Responsabilidades**:
-- Receber requisições de pagamento
-- Validar dados de entrada
-- Autorizar com adquirente (via `AdquirenteService`)
-- Persistir transação
-- Publicar eventos via Outbox
-
-**Endpoints**:
-- `POST /pagamentos` - Criar pagamento (idempotente)
-- `GET /pagamentos/{id}` - Consultar pagamento
-- `GET /pagamentos` - Listar todos (paginado)
-
-**Regras de Negócio**:
-- Valor mínimo: R$ 0,01
-- Descrição obrigatória
-- Tipo de pagamento validado (PIX, CARTAO_CREDITO, BOLETO)
-- Geração automática de NSU e código de autorização
-
-### **2. Módulo Estorno** (`estorno/`)
-
-**Responsabilidades**:
-- Processar estornos de pagamentos
-- Validar elegibilidade (status PROCESSADO)
-- Prevenir duplicação com lock distribuído
-- Atualizar status de pagamento
-
-**Endpoints**:
-- `POST /pagamentos/{id}/estornos` - Solicitar estorno (idempotente)
-- `GET /pagamentos/{id}/estornos` - Listar estornos do pagamento
-- `GET /estornos/{id}` - Consultar estorno específico
-
-**Regras de Negócio**:
-- Apenas pagamentos `PROCESSADO` podem ser estornados
-- Estorno total (valor integral)
-- Lock distribuído previne estornos duplicados concorrentes
-- Um pagamento pode ter múltiplos estornos (se falhou)
-
-### **3. Módulo Adquirente** (`adquirente/`)
-
-**Responsabilidades**:
-- Simular comunicação com adquirente externo
-- Aplicar resiliência (Circuit Breaker, Retry, Bulkhead)
-- Chaos engineering configurável
-
-**Componentes**:
-- `AdquirenteService`: Orquestra resiliência
-- `AdquirenteSimuladoService`: Mock com taxa de falhas configurável
-
-**Configuração Chaos** (application.yml):
-```yaml
-adquirente:
-  simulado:
-    failure-rate: 0.2      # 20% de falhas
-    latency-ms: 100        # 100ms de latência artificial
-    timeout-rate: 0.1      # 10% de timeouts
-    aprovacao-rate: 0.9    # 90% de aprovações
-```
-
-### **4. Infraestrutura** (`infra/`)
-
-#### **4.1. Idempotência**
-- Interceptor automático em métodos anotados com `@Idempotente`
-- Armazenamento Redis com estrutura:
-  ```json
-  {
-    "chave": "550e8400-...",
-    "resposta": "{...}",
-    "statusCode": 201,
-    "timestamp": "2025-11-02T10:30:00Z"
-  }
+- [ ] **1. Criar estrutura de pastas**:
+  ```
+  {modulo}/
+  ├── controller/
+  ├── service/
+  ├── repository/
+  ├── domain/
+  ├── dto/
+  ├── events/
+  └── exception/ (se necessário)
   ```
 
-#### **4.2. Auditoria**
-- Listeners Kafka consomem eventos de domínio
-- Persistem em `evento_auditoria` com:
-  - Tipo de evento
-  - Agregado (pagamento_id, estorno_id)
-  - Payload JSON completo
-  - Timestamp
+- [ ] **2. Criar entidade JPA** (`domain/{Modulo}.java`):
+  - Usar `@Entity`, `@Table`, `@Id`, `@GeneratedValue`
+  - Adicionar índices (`@Index`) para campos consultados
+  - Implementar `@PrePersist` e `@PreUpdate` para timestamps
 
-#### **4.3. Outbox**
-- `OutboxService.salvar()` persiste eventos transacionalmente
-- `OutboxPublisher` (job @Scheduled) publica pendentes
-- Retry automático em falhas de publicação
+- [ ] **3. Criar enums de domínio** (`domain/Status{Modulo}.java`):
+  - Status do ciclo de vida da entidade
+  - Outros value objects necessários
 
----
+- [ ] **4. Criar Repository** (`repository/{Modulo}Repository.java`):
+  - Extend `JpaRepository<{Modulo}, Long>`
+  - Adicionar queries customizadas se necessário
 
-## 🗄️ **Banco de Dados**
+- [ ] **5. Criar DTOs** (`dto/`):
+  - Request DTO com validações (`@NotNull`, `@NotBlank`, etc)
+  - Response DTO (pode expor mais campos que Request)
+  - Mapper com métodos `toEntity()` e `toResponseDTO()`
 
-### **Schema PostgreSQL**
+- [ ] **6. Criar Service** (`service/{Modulo}Service.java`):
+  - Anotar com `@Service`, `@RequiredArgsConstructor`, `@Slf4j`
+  - Usar `@Transactional` em métodos que modificam dados
+  - Publicar eventos via `OutboxService`
+  - **Nunca** injetar `Repository` ou `Service` de outro módulo diretamente
 
-#### **Tabela: `pagamento`**
-```sql
-CREATE TABLE pagamento (
-    id BIGSERIAL PRIMARY KEY,
-    descricao VARCHAR(255) NOT NULL,
-    valor DECIMAL(19,2) NOT NULL,
-    tipo_pagamento VARCHAR(20) NOT NULL,
-    status VARCHAR(20) NOT NULL,
-    nsu VARCHAR(50),
-    codigo_autorizacao VARCHAR(50),
-    data_criacao TIMESTAMP NOT NULL,
-    data_atualizacao TIMESTAMP
-);
+- [ ] **7. Criar Controller** (`controller/{Modulo}Controller.java`):
+  - Anotar com `@RestController`, `@RequestMapping`
+  - Usar `@Idempotente` em POST/PUT
+  - Validar entrada com `@Valid`
+  - Retornar status HTTP corretos (201, 200, 404, etc)
 
-CREATE INDEX idx_pagamento_status ON pagamento(status);
-CREATE INDEX idx_pagamento_nsu ON pagamento(nsu);
-```
+- [ ] **8. Criar Eventos de Domínio** (`events/`):
+  - Evento de criação (`{Modulo}CriadoEvento`)
+  - Evento de mudança de status (`{Modulo}StatusAlteradoEvento`)
+  - Incluir timestamp e dados relevantes
 
-#### **Tabela: `estorno`**
-```sql
-CREATE TABLE estorno (
-    id BIGSERIAL PRIMARY KEY,
-    pagamento_id BIGINT NOT NULL,
-    valor DECIMAL(19,2) NOT NULL,
-    motivo VARCHAR(255),
-    status VARCHAR(20) NOT NULL,
-    data_criacao TIMESTAMP NOT NULL,
-    data_atualizacao TIMESTAMP,
-    FOREIGN KEY (pagamento_id) REFERENCES pagamento(id)
-);
+- [ ] **9. Criar Migração Flyway** (`resources/db/migration/V{n}__criar_tabela_{modulo}.sql`):
+  - DDL completo da tabela
+  - Índices necessários
+  - Constraints (PK, NOT NULL, etc)
 
-CREATE INDEX idx_estorno_pagamento_id ON estorno(pagamento_id);
-CREATE INDEX idx_estorno_status ON estorno(status);
-```
-
-#### **Tabela: `idempotencia`**
-```sql
-CREATE TABLE idempotencia (
-    id BIGSERIAL PRIMARY KEY,
-    chave VARCHAR(255) NOT NULL UNIQUE,
-    resposta TEXT,
-    status_code INTEGER,
-    timestamp TIMESTAMP NOT NULL,
-    expira_em TIMESTAMP NOT NULL
-);
-
-CREATE INDEX idx_idempotencia_expira_em ON idempotencia(expira_em);
-```
-
-#### **Tabela: `outbox_evento`**
-```sql
-CREATE TABLE outbox_evento (
-    id BIGSERIAL PRIMARY KEY,
-    agregado_tipo VARCHAR(50) NOT NULL,
-    agregado_id BIGINT NOT NULL,
-    tipo_evento VARCHAR(100) NOT NULL,
-    payload TEXT NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDENTE',
-    data_criacao TIMESTAMP NOT NULL,
-    data_publicacao TIMESTAMP
-);
-
-CREATE INDEX idx_outbox_status ON outbox_evento(status);
-CREATE INDEX idx_outbox_data_criacao ON outbox_evento(data_criacao);
-```
-
-#### **Tabela: `evento_auditoria`**
-```sql
-CREATE TABLE evento_auditoria (
-    id BIGSERIAL PRIMARY KEY,
-    tipo_evento VARCHAR(100) NOT NULL,
-    agregado_tipo VARCHAR(50) NOT NULL,
-    agregado_id BIGINT NOT NULL,
-    payload TEXT NOT NULL,
-    data_evento TIMESTAMP NOT NULL
-);
-
-CREATE INDEX idx_auditoria_agregado ON evento_auditoria(agregado_tipo, agregado_id);
-CREATE INDEX idx_auditoria_tipo_evento ON evento_auditoria(tipo_evento);
-CREATE INDEX idx_auditoria_data_evento ON evento_auditoria(data_evento);
-```
-
-### **Flyway Migrations**
-
-Migrações localizadas em `src/main/resources/db/migration/`:
-
-1. **V1**: Criar tabela `pagamento`
-2. **V2**: Criar tabela `estorno`
-3. **V3**: Criar tabela `idempotencia`
-4. **V4**: Criar tabela `outbox_evento`
-5. **V5**: Criar tabela `evento_auditoria`
-
-**Execução**: Automática no startup via `spring.flyway.enabled=true`
+- [ ] **10. Criar Testes**:
+  - Testes unitários do Service (`{Modulo}ServiceTest.java`)
+  - Testes de integração (`{Modulo}IntegrationTest.java`)
 
 ---
 
-## 📨 **Mensageria (Kafka)**
+## 🎖️ **As 10 Regras de Ouro**
 
-### **Tópicos Kafka**
+*(Repetição das Regras Fundamentais para ênfase)*
 
-| Tópico | Eventos | Consumidores |
-|--------|---------|--------------|
-| `pagamentos` | `PagamentoCriadoEvento`, `PagamentoStatusAlteradoEvento` | `PagamentoEventListener` (Auditoria) |
-| `estornos` | `EstornoCriadoEvento`, `EstornoStatusAlteradoEvento` | `EstornoEventListener` (Auditoria) |
-
-### **Estrutura de Evento**
-
-```json
-{
-  "tipoEvento": "PAGAMENTO_CRIADO",
-  "timestamp": "2025-11-02T10:30:00Z",
-  "agregadoId": 123,
-  "dados": {
-    "id": 123,
-    "descricao": "Compra na Loja X",
-    "valor": 150.50,
-    "status": "PROCESSADO",
-    "nsu": "123456789",
-    "codigoAutorizacao": "AUTH987654"
-  }
-}
-```
-
-### **Configuração Kafka**
-
-**Producer**:
-```yaml
-spring:
-  kafka:
-    producer:
-      key-serializer: StringSerializer
-      value-serializer: JsonSerializer
-      acks: all                    # Garantia de escrita
-      retries: 3                   # Retry automático
-```
-
-**Consumer**:
-```yaml
-spring:
-  kafka:
-    consumer:
-      group-id: pagamentos-group
-      auto-offset-reset: earliest  # Processa desde início
-      enable-auto-commit: false    # Controle manual de offset
-      key-deserializer: StringDeserializer
-      value-deserializer: JsonDeserializer
-      properties:
-        spring.json.trusted.packages: br.com.sicredi.toolschallenge
-```
+1. 🚫 Nunca importe entidades JPA de outro módulo
+2. 🚫 Nunca crie Foreign Keys entre tabelas de módulos diferentes
+3. ✅ Sempre use DTOs para comunicação entre módulos
+4. ✅ Sempre publique eventos de domínio para mudanças importantes
+5. ✅ Controllers só devem retornar DTOs, nunca entidades
+6. ✅ Services devem ser transacionais
+7. ✅ Use @Idempotente em todos os endpoints de modificação
+8. ✅ Validações de entrada no DTO com Bean Validation
+9. ✅ Timestamps automáticos com @PrePersist/@PreUpdate
+10. ✅ Exceções de negócio devem estender NegocioException ou RecursoNaoEncontradoException
 
 ---
 
-## 🔴 **Cache e Locks Distribuídos**
+## ⚠️ **Princípio KISS**
 
-### **Redis - Idempotência**
+**Mantra**: *"O código que não existe é o código que não tem bugs"*
 
-**TTL**: 24 horas  
-**Estrutura de Chave**: `idempotencia:{UUID}`
+### **Checklist: "Preciso Mesmo Criar Isso?"**
 
-```redis
-SET idempotencia:550e8400-e29b-41d4-a716-446655440000 
-    '{"resposta":"{...}","statusCode":201,"timestamp":"..."}'
-    EX 86400
-```
+Antes de criar qualquer abstração customizada, pergunte:
 
-### **Redisson - Locks Distribuídos**
+- [ ] **Já existe no Spring/Java?** (99% das vezes, sim)
+- [ ] **Bean Validation resolve?** (`@NotNull`, `@Size`, `@Pattern`, `@DecimalMin`, etc)
+- [ ] **Será usado em 3+ lugares?** (Se não, não crie abstração)
+- [ ] **Alguém da equipe vai entender isso facilmente?** (Se não, simplifique)
+- [ ] **Posso resolver com 1 linha de código padrão?** (Se sim, não crie classe customizada)
 
-**Configuração**:
+### **Regra dos 3 Usos**
+
+> **Só crie abstração customizada após usar a mesma lógica em 3 lugares diferentes.**
+
 ```java
-@Configuration
-@ConditionalOnProperty(name = "spring.data.redis.enabled", havingValue = "true", matchIfMissing = true)
-public class RedissonConfig {
-    
-    @Bean
-    public RedissonClient redissonClient() {
-        Config config = new Config();
-        config.useSingleServer()
-              .setAddress("redis://localhost:6379")
-              .setPassword("redis123")
-              .setConnectionPoolSize(10)
-              .setConnectionMinimumIdleSize(5);
-        return Redisson.create(config);
-    }
+// 1º uso: Copie e cole (sim, é OK inicialmente)
+if (valor.compareTo(BigDecimal.ZERO) <= 0) { ... }
+
+// 2º uso: Ainda copie e cole
+if (valor.compareTo(BigDecimal.ZERO) <= 0) { ... }
+
+// 3º uso: AGORA extraia para método/classe
+private boolean valorInvalido(BigDecimal valor) {
+    return valor.compareTo(BigDecimal.ZERO) <= 0;
 }
 ```
 
-**Uso de Lock**:
-```java
-String lockKey = "estorno:pagamento:" + pagamentoId;
-RLock lock = redissonClient.getLock(lockKey);
-
-try {
-    // Tenta adquirir lock: 5s wait, 30s lease
-    if (lock.tryLock(5, 30, TimeUnit.SECONDS)) {
-        try {
-            // Operação crítica protegida
-            processarEstorno(pagamentoId);
-        } finally {
-            lock.unlock();
-        }
-    } else {
-        throw new NegocioException("Operação já em andamento");
-    }
-} catch (InterruptedException e) {
-    Thread.currentThread().interrupt();
-    throw new NegocioException("Lock interrompido");
-}
-```
-
-**Watchdog**: Redisson renova automaticamente locks enquanto thread está viva.
+**Benefícios**:
+- ✅ Evita abstrações prematuras
+- ✅ Só cria quando há necessidade real
+- ✅ Menos código = menos bugs
 
 ---
 
-## 🛡️ **Resiliência (Resilience4j)**
-
-### **Circuit Breaker**
-
-**Configuração** (application.yml):
-```yaml
-resilience4j:
-  circuitbreaker:
-    instances:
-      adquirente:
-        failure-rate-threshold: 50               # 50% falhas → OPEN
-        sliding-window-size: 10                  # Janela de 10 chamadas
-        minimum-number-of-calls: 5               # Mínimo para calcular taxa
-        wait-duration-in-open-state: 10s         # 10s em OPEN
-        permitted-number-of-calls-in-half-open-state: 3
-        automatic-transition-from-open-to-half-open-enabled: true
-        register-health-indicator: true          # Expor em /actuator/health
-```
-
-**Uso**:
-```java
-@CircuitBreaker(name = "adquirente", fallbackMethod = "autorizarPagamentoFallback")
-public AutorizacaoResponse autorizarPagamento(AutorizacaoRequest request) {
-    return adquirenteSimulado.autorizarPagamento(request);
-}
-
-private AutorizacaoResponse autorizarPagamentoFallback(AutorizacaoRequest request, Exception ex) {
-    log.warn("Circuit Breaker OPEN - Fallback ativado");
-    return new AutorizacaoResponse(false, null, null); // PENDENTE
-}
-```
-
-### **Retry**
-
-**Configuração**:
-```yaml
-resilience4j:
-  retry:
-    instances:
-      adquirente:
-        max-attempts: 3                          # 1 original + 2 retries
-        wait-duration: 500ms                     # 500ms entre tentativas
-        retry-exceptions:
-          - AdquirenteIndisponivelException
-          - java.net.ConnectException
-          - java.net.SocketTimeoutException
-```
-
-### **Bulkhead (Thread Pool)**
-
-**Configuração**:
-```yaml
-resilience4j:
-  bulkhead:
-    instances:
-      adquirente:
-        max-thread-pool-size: 10                 # Máximo 10 threads
-        core-thread-pool-size: 5                 # 5 threads core
-        queue-capacity: 20                       # Fila de 20 requisições
-        keep-alive-duration: 20ms
-```
-
-**Proteção**: Isola recursos e previne esgotamento de threads da aplicação.
-
----
-
-## 📊 **Observabilidade**
-
-### **Actuator Endpoints**
-
-**Configuração**:
-```yaml
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus,circuitbreakers,circuitbreakerevents
-      base-path: /atuador
-  endpoint:
-    health:
-      show-details: always
-```
-
-**Endpoints Disponíveis**:
-
-| Endpoint | Descrição |
-|----------|-----------|
-| `/atuador/health` | Status de saúde (DB, Redis, Kafka) |
-| `/atuador/metrics` | Métricas gerais |
-| `/atuador/prometheus` | Métricas formato Prometheus |
-| `/atuador/circuitbreakers` | Estado dos Circuit Breakers |
-| `/atuador/circuitbreakerevents` | Histórico de eventos CB |
-| `/atuador/info` | Informações da aplicação |
-
-### **Prometheus Metrics**
-
-**Métricas Principais**:
-- `http_server_requests_seconds` - Latência de requisições
-- `resilience4j_circuitbreaker_state` - Estado do CB (0=CLOSED, 1=OPEN, 2=HALF_OPEN)
-- `resilience4j_circuitbreaker_failure_rate` - Taxa de falhas
-- `resilience4j_retry_calls` - Número de retries
-- `jvm_memory_used_bytes` - Uso de memória
-- `hikaricp_connections_active` - Conexões DB ativas
-
-### **Swagger UI**
-
-**URL**: `http://localhost:8080/swagger-ui.html`
-
-Documentação interativa de todas as APIs com:
-- Schemas de request/response
-- Validações
-- Códigos de erro
-- Exemplos de uso
-
----
-
-## 🔐 **Segurança**
-
-### **Implementado**
-- ✅ Validação de entrada com `@Valid`
-- ✅ Exception handling global
-- ✅ Sanitização de logs (mascaramento de cartões)
-- ✅ CORS configurado (em desenvolvimento: `*`)
-
-### **TODO (Roadmap)**
-- ⏳ Autenticação JWT
-- ⏳ Rate limiting
-- ⏳ HTTPS obrigatório
-- ⏳ Criptografia de dados sensíveis
-
----
-
-## 🌐 **APIs e Endpoints**
-
-### **Pagamentos**
-
-#### `POST /pagamentos`
-Cria novo pagamento (idempotente).
-
-**Headers**:
-- `Idempotency-Key` (obrigatório): UUID único
-- `Content-Type: application/json`
-
-**Request**:
-```json
-{
-  "descricao": "Compra na Loja X",
-  "valor": 150.50,
-  "tipoPagamento": "CARTAO_CREDITO"
-}
-```
-
-**Response 201**:
-```json
-{
-  "id": 123,
-  "descricao": "Compra na Loja X",
-  "valor": 150.50,
-  "tipoPagamento": "CARTAO_CREDITO",
-  "status": "PROCESSADO",
-  "nsu": "123456789",
-  "codigoAutorizacao": "AUTH987654",
-  "dataCriacao": "2025-11-02T10:30:00Z"
-}
-```
-
-#### `GET /pagamentos/{id}`
-Consulta pagamento por ID.
-
-**Response 200**:
-```json
-{
-  "id": 123,
-  "descricao": "Compra na Loja X",
-  "valor": 150.50,
-  "status": "PROCESSADO",
-  ...
-}
-```
-
-### **Estornos**
-
-#### `POST /pagamentos/{id}/estornos`
-Solicita estorno de pagamento (idempotente).
-
-**Headers**:
-- `Idempotency-Key` (obrigatório)
-
-**Request**:
-```json
-{
-  "motivo": "Cliente solicitou cancelamento"
-}
-```
-
-**Response 201**:
-```json
-{
-  "id": 456,
-  "pagamentoId": 123,
-  "valor": 150.50,
-  "motivo": "Cliente solicitou cancelamento",
-  "status": "PROCESSADO",
-  "dataCriacao": "2025-11-02T11:00:00Z"
-}
-```
-
-#### `GET /pagamentos/{id}/estornos`
-Lista estornos de um pagamento.
-
-**Response 200**:
-```json
-[
-  {
-    "id": 456,
-    "pagamentoId": 123,
-    "valor": 150.50,
-    "status": "PROCESSADO",
-    ...
-  }
-]
-```
-
-### **Códigos de Erro**
-
-| Código | Descrição |
-|--------|-----------|
-| `400 Bad Request` | Validação falhou |
-| `404 Not Found` | Recurso não encontrado |
-| `409 Conflict` | Chave idempotente duplicada |
-| `422 Unprocessable Entity` | Regra de negócio violada |
-| `500 Internal Server Error` | Erro inesperado |
-| `503 Service Unavailable` | Circuit Breaker OPEN |
-
----
-
-## ⚙️ **Configuração e Ambiente**
-
-### **Pré-requisitos**
-- Java 17+
-- Docker e Docker Compose
-- Maven 3.9+
-
-### **Variáveis de Ambiente**
-
-```bash
-# Database
-SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/pagamentos
-SPRING_DATASOURCE_USERNAME=postgres
-SPRING_DATASOURCE_PASSWORD=postgres
-
-# Redis
-SPRING_DATA_REDIS_HOST=localhost
-SPRING_DATA_REDIS_PORT=6379
-SPRING_DATA_REDIS_PASSWORD=redis123
-
-# Kafka
-SPRING_KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-
-# Resilience4j Chaos Engineering
-ADQUIRENTE_SIMULADO_FAILURE_RATE=0.2
-ADQUIRENTE_SIMULADO_LATENCY_MS=100
-ADQUIRENTE_SIMULADO_TIMEOUT_RATE=0.1
-```
-
-### **Iniciar Infraestrutura**
-
-```bash
-# Subir PostgreSQL, Redis e Kafka
-docker-compose up -d
-
-# Verificar status
-docker-compose ps
-
-# Ver logs
-docker-compose logs -f
-```
-
-### **Compilar e Executar**
-
-```bash
-# Compilar
-mvn clean package
-
-# Executar
-mvn spring-boot:run
-
-# Ou via JAR
-java -jar target/toolschallenge-0.0.1-SNAPSHOT.jar
-```
-
-### **Acessar Serviços**
-
-- **API**: http://localhost:8080
-- **Swagger**: http://localhost:8080/swagger-ui.html
-- **Actuator**: http://localhost:8080/atuador
-- **Prometheus Metrics**: http://localhost:8080/atuador/prometheus
-
----
-
-## 🧪 **Testes**
-
-### **Estrutura de Testes**
-
-```
-src/test/java/
-├── integration/
-│   ├── PagamentoIntegrationTest.java
-│   ├── EstornoIntegrationTest.java
-│   └── IdempotenciaIntegrationTest.java
-└── unit/
-    ├── PagamentoServiceTest.java
-    ├── EstornoServiceTest.java
-    └── AdquirenteServiceTest.java
-```
-
-### **Testcontainers**
-
-Testes de integração usam containers Docker:
-- PostgreSQL (via Testcontainers)
-- Kafka (via Testcontainers)
-- Redis (via Testcontainers)
-
-**Exemplo**:
-```java
-@SpringBootTest
-@Testcontainers
-class PagamentoIntegrationTest {
-    
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
-    
-    @Container
-    static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"));
-    
-    @Test
-    void deveCriarPagamentoComSucesso() {
-        // ...
-    }
-}
-```
-
-### **Executar Testes**
-
-```bash
-# Todos os testes
-mvn test
-
-# Apenas testes unitários
-mvn test -Dtest=*Test
-
-# Apenas testes de integração
-mvn test -Dtest=*IntegrationTest
-
-# Com cobertura
-mvn test jacoco:report
-```
-
----
-
-## 🎯 **Regras de Desenvolvimento de Testes (TDD)**
+## 🎯 **Regras de TDD**
 
 ### **⚠️ REGRAS CRÍTICAS - SEMPRE SEGUIR**
 
@@ -2311,38 +567,6 @@ mvn test jacoco:report
 **🔵 REFACTOR (Melhoria)**
 1. Melhorar o código mantendo os testes passando
 2. Executar testes após cada refatoração
-
-**Exemplo Prático**:
-```java
-// PASSO 1: RED - Criar teste que DEVE FALHAR
-@Test
-void deveLancarExcecaoQuandoValorNegativo() {
-    // Arrange
-    EstornoRequestDTO request = new EstornoRequestDTO();
-    request.setValor(new BigDecimal("-100.00")); // Valor negativo
-    
-    // Act & Assert
-    assertThatThrownBy(() -> service.criarEstorno(request))
-        .isInstanceOf(NegocioException.class)
-        .hasMessageContaining("Valor deve ser positivo");
-}
-
-// EXECUTAR: mvn test -Dtest=EstornoServiceTest#deveLancarExcecaoQuandoValorNegativo
-// RESULTADO ESPERADO: ❌ FALHA (código ainda não valida)
-
-// PASSO 2: GREEN - Implementar validação
-public void criarEstorno(EstornoRequestDTO request) {
-    if (request.getValor().compareTo(BigDecimal.ZERO) < 0) {
-        throw new NegocioException("Valor deve ser positivo");
-    }
-    // ... resto do código
-}
-
-// EXECUTAR: mvn test -Dtest=EstornoServiceTest#deveLancarExcecaoQuandoValorNegativo
-// RESULTADO ESPERADO: ✅ SUCESSO
-
-// PASSO 3: REFACTOR - Melhorar sem quebrar teste
-```
 
 **Por que essa regra é crítica?**
 - ✅ Garante que o teste está **realmente testando** a lógica
@@ -2369,19 +593,6 @@ public void criarEstorno(EstornoRequestDTO request) {
 - **Padrão**: `*IntegrationTest.java`
 - **Momento**: **Apenas após projeto completo** ou quando usuário solicitar
 
-**Exemplo de Decisão**:
-```
-Usuário diz: "Crie testes para EstornoService"
-→ Criar APENAS EstornoServiceTest.java (unitário)
-→ NÃO criar EstornoIntegrationTest.java
-
-Usuário diz: "Crie testes de integração para Estorno"
-→ Criar EstornoIntegrationTest.java (com Testcontainers)
-
-Usuário diz: "Crie todos os testes"
-→ Perguntar: "Deseja incluir testes de integração também, ou apenas unitários?"
-```
-
 **Por que essa regra é crítica?**
 - ✅ Testes unitários são mais **rápidos de criar e executar**
 - ✅ Testes de integração requerem **infraestrutura complexa** (Docker, Testcontainers)
@@ -2391,58 +602,6 @@ Usuário diz: "Crie todos os testes"
 #### **3. Processo de Decisão: Sempre Perguntar ao Usuário**
 
 **REGRA**: Ao chegar em **cenários com múltiplas opções válidas**, **NUNCA** escolher automaticamente. **SEMPRE** perguntar ao usuário qual abordagem prefere.
-
-**Cenários que requerem pergunta**:
-
-**Exemplo 1: Teste Falhando - Validação Faltando**
-```
-Situação: Teste falha com NullPointerException em pagamento.getDataHora()
-
-Opção A: Adicionar null check no código de produção (validação defensiva)
-Opção B: Corrigir apenas o teste (assumir que @PrePersist sempre funciona)
-
-❌ ERRADO: Escolher Opção A automaticamente
-✅ CORRETO: 
-"Encontrei um NullPointerException. Há duas abordagens:
-- Opção A: Adicionar validação defensiva no código (if dataHora == null)
-- Opção B: Confiar no @PrePersist e corrigir apenas o teste
-
-Qual abordagem você prefere?"
-```
-
-**Exemplo 2: Múltiplas Tecnologias Possíveis**
-```
-Situação: Criar testes REST para Controller
-
-Opção A: Usar MockMvc (@WebMvcTest)
-Opção B: Usar RestAssured
-Opção C: Usar TestRestTemplate
-
-✅ CORRETO:
-"Para testes REST, existem 3 opções:
-- MockMvc: Mais rápido, sem servidor HTTP real
-- RestAssured: Mais legível, DSL fluente
-- TestRestTemplate: Integração Spring Boot
-
-Qual você prefere? (Recomendo MockMvc para unitários)"
-```
-
-**Exemplo 3: Estratégia de Refatoração**
-```
-Situação: Código tem duplicação em 3 lugares
-
-Opção A: Extrair para método privado
-Opção B: Criar classe helper
-Opção C: Deixar duplicado (YAGNI - You Aren't Gonna Need It)
-
-✅ CORRETO:
-"Identifiquei código duplicado em 3 lugares. Opções:
-- A) Extrair para método privado (mais simples)
-- B) Criar classe helper (mais reutilizável)
-- C) Deixar duplicado (Regra dos 3 - ainda não justifica abstração)
-
-Qual abordagem você prefere?"
-```
 
 **Por que essa regra é crítica?**
 - ✅ Usuário mantém **controle das decisões** arquiteturais
@@ -2472,122 +631,6 @@ Antes de considerar um módulo "testado", verificar:
 3. ✅ **Testes Unitários de Mapper** (`*MapperTest.java`) - SEMPRE
 4. ⏳ **Testes de Integração** (`*IntegrationTest.java`) - **APENAS SE SOLICITADO**
 
-**Quando criar testes de integração**:
-- ✅ Usuário solicitou explicitamente
-- ✅ Projeto completo (todos os módulos implementados)
-- ✅ Infraestrutura Docker configurada (Testcontainers)
-- ❌ **NUNCA** criar antes de completar testes unitários
-
----
-
-## 🚀 **Deploy e CI/CD**
-
-### **TODO - Pipeline GitHub Actions**
-
-```yaml
-name: CI/CD Pipeline
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-      - run: mvn clean verify
-      - run: docker build -t toolschallenge:${{ github.sha }} .
-```
-
-### **Dockerfile**
-
-```dockerfile
-FROM eclipse-temurin:17-jre-alpine
-WORKDIR /app
-COPY target/*.jar app.jar
-EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
-```
-
----
-
-## 📈 **Monitoramento**
-
-### **Stack Proposta**
-
-```
-Aplicação → Micrometer → Prometheus → Grafana
-                            ↓
-                         Alertmanager
-```
-
-### **Dashboards Grafana**
-
-**Painéis Principais**:
-1. **HTTP Metrics**: Latência, throughput, erros por endpoint
-2. **Circuit Breaker**: Estado, taxa de falhas, fallbacks
-3. **Database**: Conexões ativas, latência de queries
-4. **JVM**: Memory, GC, threads
-5. **Kafka**: Offset lag, mensagens/s
-
-### **Alertas Propostos**
-
-| Alerta | Condição | Severidade |
-|--------|----------|------------|
-| Circuit Breaker OPEN | Estado = OPEN por > 1min | Critical |
-| Alta Taxa de Erro | 5xx > 5% por 5min | High |
-| Latência Alta | p95 > 1s por 5min | Medium |
-| Database Pool Cheio | Connections = max por 2min | High |
-
----
-
-## 🐛 **Troubleshooting**
-
-### **Problema: 409 Conflict em requisição nova**
-
-**Causa**: Chave idempotente duplicada ou não expirada no Redis.
-
-**Solução**:
-```bash
-# Limpar chave específica
-redis-cli -a redis123 DEL "idempotencia:550e8400-..."
-
-# Limpar todas (CUIDADO!)
-redis-cli -a redis123 FLUSHDB
-```
-
-### **Problema: Circuit Breaker sempre OPEN**
-
-**Causa**: Taxa de falhas do adquirente simulado muito alta.
-
-**Solução**: Reduzir `failure-rate` em `application.yml`:
-```yaml
-adquirente:
-  simulado:
-    failure-rate: 0.1  # 10% em vez de 20%
-```
-
-### **Problema: Eventos não chegam no Kafka**
-
-**Verificações**:
-1. Kafka rodando: `docker-compose ps kafka`
-2. Tópico existe: `docker exec -it kafka kafka-topics --list --bootstrap-server localhost:9092`
-3. Outbox pendente: `SELECT * FROM outbox_evento WHERE status = 'PENDENTE';`
-4. Logs do `OutboxPublisher`: Procurar por erros
-
-### **Problema: Lock Distribuído não funciona**
-
-**Verificações**:
-1. Redis rodando: `redis-cli -a redis123 ping`
-2. RedissonClient injetado: Verificar logs de startup
-3. Lock key correto: `redis-cli -a redis123 KEYS "estorno:*"`
-
 ---
 
 ## 🗺️ **Roadmap**
@@ -2608,12 +651,12 @@ adquirente:
 - [x] Lock Distribuído (Redisson)
 - [x] Testes de concorrência
 
-### **Fase 4 — Resiliência** 🔄 (50% completo)
+### **Fase 4 — Resiliência** 🔄 (75% completo)
 - [x] Resilience4j configurado
 - [x] Circuit Breaker + Retry + Bulkhead
 - [x] Adquirente Simulado com Chaos
+- [x] Scheduler de reprocessamento PENDENTE
 - [ ] Integração completa
-- [ ] Scheduler de reprocessamento PENDENTE
 - [ ] Testes de resiliência
 
 ### **Fase 5 — Observabilidade** ⏳
@@ -2636,245 +679,28 @@ adquirente:
 
 ---
 
-## ❓ **Perguntas Frequentes (FAQ) - Monolito Modular**
+## 📚 **Documentação Técnica Completa**
 
-### **1. Por que não começar direto com microserviços?**
+Para informações detalhadas sobre:
+- Stack Tecnológico (versões, tecnologias)
+- Estrutura de Pastas
+- Banco de Dados (DDL, migrations, índices)
+- Mensageria Kafka (tópicos, eventos, configurações)
+- Cache e Locks Distribuídos (Redis, Redisson)
+- Resiliência (Resilience4j configurações)
+- Observabilidade (Actuator, Prometheus, Swagger)
+- APIs e Endpoints (exemplos completos)
+- Configuração e Ambiente (setup, variáveis)
+- Testes (estrutura, Testcontainers, execução)
+- Deploy e CI/CD
+- Monitoramento (Grafana, alertas)
+- Troubleshooting
+- FAQ (Perguntas Frequentes)
 
-**Resposta**: Microserviços trazem complexidade operacional desde o dia 1:
-- Deploy de N serviços independentes
-- Service discovery, API Gateway, Load Balancer
-- Distributed tracing, logging centralizado
-- Latência de rede entre serviços
-- Transações distribuídas (complexas)
-
-**Monolito Modular permite**:
-- ✅ Começar simples (1 deploy)
-- ✅ Evoluir a arquitetura conforme necessidade
-- ✅ Migrar módulos específicos quando justificável (ex: escala, times independentes)
-
-### **2. Como saber quando migrar um módulo para microserviço?**
-
-**Sinais de que está na hora**:
-- 🔥 Módulo tem carga muito maior que outros (necessita escala independente)
-- 👥 Time cresceu e precisa de autonomia de deploy
-- 🚀 Tecnologia diferente seria melhor (ex: módulo de ML em Python)
-- 🌍 Necessidade de deploy em regiões diferentes
-
-**Não migre se**:
-- ❌ Módulo tem baixa carga
-- ❌ Comunicação é muito frequente com outros módulos (latência de rede prejudicaria)
-- ❌ Time é pequeno e consegue gerenciar o monólito
-
-### **3. Posso ter transações entre módulos?**
-
-**No monolito**: ✅ Sim, `@Transactional` funciona entre módulos (mesma JVM).
-
-**Em microserviços**: ❌ Não, cada serviço tem seu próprio banco.
-
-**Solução**: Use **Saga Pattern** ou **Outbox Pattern**:
-```java
-// Módulo Pagamento
-@Transactional
-public void criar() {
-    pagamentoRepository.save(pagamento);
-    outboxService.salvar(evento);  // Mesmo banco, mesma transação
-}
-
-// Kafka entrega para outros módulos/serviços
-```
-
-### **4. Como testar a modularização?**
-
-**Teste da "Linha Imaginária"**:
-
-Imagine uma linha dividindo os módulos. Se você consegue responder "sim" para todas:
-
-- [ ] Módulo A funciona sem conhecer implementação de Módulo B?
-- [ ] Posso mover Módulo B para outro repositório sem quebrar A?
-- [ ] A comunicação entre A e B é apenas via DTOs ou eventos?
-- [ ] Não há FKs de A para B no banco de dados?
-
-Se alguma resposta for "não", **há acoplamento** que precisa ser removido.
-
-### **5. Shared/Infra não vai gerar acoplamento?**
-
-**Resposta**: Apenas se mal usado.
-
-**✅ Correto**: `shared/` tem apenas **utilitários genéricos**:
-- Configurações (Kafka, Redis)
-- Exception handlers
-- Annotations (`@Idempotente`)
-- DTOs base (se necessário)
-
-**❌ Errado**: `shared/` **NÃO** deve ter:
-- Lógica de negócio específica de um domínio
-- Entidades JPA compartilhadas
-- Services que orquestram múltiplos módulos
-
-**Regra**: Se `shared/` tiver conhecimento de negócio de `pagamento/`, está errado.
-
-### **6. Como lidar com consultas que precisam de dados de múltiplos módulos?**
-
-**Opção 1: Backend for Frontend (BFF)**
-```java
-@Service
-public class PagamentoComEstornoBFFService {
-    private final PagamentoService pagamentoService;
-    private final EstornoService estornoService;
-    
-    public PagamentoComEstornosDTO buscar(Long id) {
-        PagamentoDTO pag = pagamentoService.buscar(id);
-        List<EstornoDTO> estornos = estornoService.buscarPorPagamento(id);
-        return new PagamentoComEstornosDTO(pag, estornos);  // Agrega
-    }
-}
-```
-
-**Opção 2: CQRS com Read Model**
-- Write: Cada módulo escreve em sua tabela
-- Read: View materializada com JOIN (ou denormalizada)
-
-**Opção 3: GraphQL Federation** (futuro, em microserviços)
-
-### **7. E se eu precisar fazer rollback de um módulo?**
-
-**No monolito**: Rollback completo (volta versão do JAR).
-
-**Em microserviços**: Rollback apenas do serviço afetado.
-
-**Mitigação**: 
-- ✅ Feature Flags (ativar/desativar sem deploy)
-- ✅ Blue/Green Deployment
-- ✅ Canary Releases (testar com % do tráfego)
-
-### **8. Preciso duplicar código de validação entre módulos?**
-
-**Sim e Não**.
-
-**❌ Não duplique**: Regras genéricas (CPF, email) → `shared/validation/`
-
-**✅ Duplique**: Regras de negócio específicas → Cada módulo tem as suas
-
-**Exemplo**:
-```java
-// shared/validation/CpfValidator.java (genérico)
-public class CpfValidator { }
-
-// pagamento/service/PagamentoService.java (regra de negócio)
-if (pagamento.getValor().compareTo(BigDecimal.ZERO) <= 0) {
-    throw new NegocioException("Valor deve ser positivo");
-}
-```
-
-### **9. Como evitar over-engineering (excesso de engenharia)?**
-
-**Sintomas de Over-Engineering**:
-- 🚨 Você criou 5 classes para fazer algo que poderia ser 1 método
-- 🚨 Você usa palavras como "Factory", "Builder", "Strategy" sem necessidade real
-- 🚨 Você criou abstração "para facilitar no futuro" que nunca é usada
-- 🚨 Outros devs precisam de 30min para entender seu código "elegante"
-
-**Soluções**:
-
-**1. Siga o Princípio YAGNI** (*You Aren't Gonna Need It*)
-```java
-// ❌ OVER-ENGINEERING
-public interface PagamentoValidatorStrategy { }
-public class ValorMinimoValidator implements PagamentoValidatorStrategy { }
-public class DescricaoObrigatoriaValidator implements PagamentoValidatorStrategy { }
-public class PagamentoValidatorFactory { }
-
-// ✅ SIMPLES: Bean Validation resolve
-public class PagamentoRequestDTO {
-    @NotNull
-    @DecimalMin("0.01")
-    private BigDecimal valor;
-    
-    @NotBlank
-    private String descricao;
-}
-```
-
-**2. Use a "Regra dos 3"**: Só abstraia após 3º uso repetido
-
-**3. Prefira composição simples a herança complexa**
-```java
-// ❌ COMPLEXO
-public abstract class BaseService<T, ID> { }
-public abstract class CrudService<T, ID> extends BaseService<T, ID> { }
-public class PagamentoService extends CrudService<Pagamento, Long> { }
-
-// ✅ SIMPLES
-@Service
-public class PagamentoService {
-    private final PagamentoRepository repository;
-    // Métodos diretos, sem abstração forçada
-}
-```
-
-**4. Code Review com foco em simplicidade**
-- Pergunte: "Consigo explicar isso em 1 frase?"
-- Se não: Simplifique
-
-**Lembre-se**: 
-> *"Debugging is twice as hard as writing the code. So if you write the code as cleverly as possible, you are, by definition, not smart enough to debug it."* - Brian Kernighan
-
----
-
-## 📚 **Referências e Documentação Adicional**
-
-### **Documentos Internos**
-- [AUDITORIA.md](../../docs/AUDITORIA.md) - Sistema de auditoria
-- [LOCK_DISTRIBUIDO.md](../../docs/LOCK_DISTRIBUIDO.md) - Locks distribuídos
-- [TESTES_IDEMPOTENCIA.md](../../docs/TESTES_IDEMPOTENCIA.md) - Testes de idempotência
-- [TESTES_OUTBOX_PATTERN.md](../../docs/TESTES_OUTBOX_PATTERN.md) - Testes do Outbox
-- [EXEMPLOS_API_PAGAMENTO.md](../../EXEMPLOS_API_PAGAMENTO.md) - Exemplos de API
-- [EXEMPLOS_API_ESTORNO.md](../../EXEMPLOS_API_ESTORNO.md) - Exemplos de estornos
-
-### **Tecnologias**
-- [Spring Boot](https://spring.io/projects/spring-boot)
-- [Resilience4j](https://resilience4j.readme.io/)
-- [Redisson](https://github.com/redisson/redisson)
-- [Apache Kafka](https://kafka.apache.org/)
-- [PostgreSQL](https://www.postgresql.org/)
-
-### **Padrões**
-- [Outbox Pattern](https://microservices.io/patterns/data/transactional-outbox.html)
-- [Circuit Breaker](https://martinfowler.com/bliki/CircuitBreaker.html)
-- [Idempotency](https://stripe.com/docs/api/idempotent_requests)
-- [Modular Monolith](https://www.kamilgrzybek.com/blog/posts/modular-monolith-primer) - Kamil Grzybek
-- [Saga Pattern](https://microservices.io/patterns/data/saga.html) - Transações distribuídas
-
-### **Princípios de Design**
-- [KISS Principle](https://en.wikipedia.org/wiki/KISS_principle) - Keep It Simple, Stupid
-- [YAGNI](https://martinfowler.com/bliki/Yagni.html) - You Aren't Gonna Need It (Martin Fowler)
-- [Occam's Razor](https://fs.blog/occams-razor/) - A solução mais simples é geralmente a melhor
-
----
-
-## 👥 **Contribuindo**
-
-### **Fluxo de Desenvolvimento**
-
-1. Criar branch feature: `git checkout -b feature/minha-feature`
-2. Implementar mudanças
-3. Executar testes: `mvn test`
-4. Commit: `git commit -m "feat: descrição"`
-5. Push: `git push origin feature/minha-feature`
-6. Abrir Pull Request
-
-### **Convenções de Commit**
-
-- Sempre inicie a mensagem com "Criado(a) ..." sem muitos detalhes
-
----
-
-## 📄 **Licença**
-
-Projeto desenvolvido para desafio técnico Sicredi - Uso Interno.
+**Consulte**: [README.md](../../README.md)
 
 ---
 
 **Última Atualização**: 02/11/2025  
 **Versão**: 0.0.1-SNAPSHOT  
-**Autor**: Equipe ToolsChallenge
+**Equipe**: ToolsChallenge
