@@ -49,6 +49,7 @@ Este projeto está sendo desenvolvido como **Monolito Modular** com a visão de 
 
 3. **Regras de Desenvolvimento**
    - 🔍 **SEMPRE VERIFICAR ANTES DE CRIAR**: Antes de implementar qualquer código ou criar qualquer arquivo, **SEMPRE** verificar se aquele arquivo, classe, método ou código similar já existe no projeto. Use ferramentas de busca (`file_search`, `grep_search`, `semantic_search`) para evitar duplicatas e conflitos de beans no Spring. Esta é a **regra #1** - previne 90% dos problemas de conflito.
+   - 🤔 **SEMPRE CONSULTAR QUANDO HOUVER MÚLTIPLAS OPÇÕES**: Ao executar uma tarefa ou pedido que tenha múltiplas libs/tecnologias/formas diferentes de implementar, **NUNCA** escolha automaticamente. Raciocine sobre as opções, considere os próximos passos do projeto, analise prós/contras de cada abordagem (simplicidade, manutenibilidade, over-engineering, compatibilidade com stack atual) e **APRESENTE AS OPÇÕES NO CHAT** para o usuário decidir. Isso previne over-engineering e mantém alinhamento com a visão do projeto.
    - ❌ **NUNCA** fazer `import` direto de classes de domínio de outro módulo
    - ❌ **NUNCA** usar `@Autowired` de `Service` de outro módulo diretamente
    - ❌ **NUNCA** criar abstrações complexas desnecessárias (custom annotations, frameworks internos, etc)
