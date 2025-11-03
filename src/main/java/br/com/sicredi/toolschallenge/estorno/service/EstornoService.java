@@ -467,6 +467,11 @@ public class EstornoService {
                 // Verificar se atingiu limite de tentativas (DLQ)
                 if (estorno.getTentativasReprocessamento() >= maxTentativas) {
                     enviadosDLQ++;
+                    
+                    // Incrementar métrica de DLQ
+                    meterRegistry.counter("reprocessamento.dlq.total", 
+                        "tipo", "estorno").increment();
+                    
                     log.warn("Estorno {} atingiu máximo de tentativas ({}) - ENVIADO PARA DLQ - Requer análise manual",
                         estorno.getIdEstorno(), maxTentativas);
                     continue;

@@ -19,6 +19,8 @@ import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
 import br.com.sicredi.toolschallenge.pagamento.repository.PagamentoRepository;
 import br.com.sicredi.toolschallenge.shared.exception.NegocioException;
 import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -73,6 +75,12 @@ class EstornoServiceTest {
 
     @Mock
     private ReprocessamentoProperties reprocessamentoProperties;
+
+    @Mock
+    private MeterRegistry meterRegistry;
+
+    @Mock
+    private Counter dlqCounter;
 
     @InjectMocks
     private EstornoService estornoService;
@@ -654,5 +662,35 @@ class EstornoServiceTest {
         verify(adquirenteService, never()).processarEstorno(any());
         verify(repository, never()).save(any());
         verify(eventoPublisher, never()).publicarEstornoStatusAlterado(any());
+    }
+
+    @Test
+    @DisplayName("20. Deve incrementar métrica DLQ quando estorno atinge máximo de tentativas")
+    void deveIncrementarMetricaDLQQuandoEstornoAtingeMaximoTentativas() {
+        // Arrange - Configurar mock do counter DLQ (apenas neste teste)
+        when(meterRegistry.counter("reprocessamento.dlq.total", "tipo", "estorno"))
+            .thenReturn(dlqCounter);
+        
+        // Arrange - Estorno que já atingiu max tentativas
+        Estorno estornoDLQ = new Estorno();
+        estornoDLQ.setId(99L);
+        estornoDLQ.setIdEstorno("EST-DLQ-METRICS");
+        estornoDLQ.setIdTransacao("TXN-DLQ-METRICS");
+        estornoDLQ.setStatus(StatusEstorno.PENDENTE);
+        estornoDLQ.setTentativasReprocessamento(3); // MAX = 3
+        estornoDLQ.setValor(new BigDecimal("999.99"));
+
+        when(repository.findEstornosPendentes())
+            .thenReturn(Arrays.asList(estornoDLQ));
+
+        // Act
+        estornoService.reprocessarEstornosPendentes();
+
+        // Assert - Verificar que counter DLQ foi incrementado
+        verify(meterRegistry).counter("reprocessamento.dlq.total", "tipo", "estorno");
+        verify(dlqCounter).increment(); // Counter foi incrementado
+        verify(repository).findEstornosPendentes();
+        verify(adquirenteService, never()).processarEstorno(any()); // Não processou
+        verify(repository, never()).save(any()); // Não salvou
     }
 }
