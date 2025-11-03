@@ -10,6 +10,7 @@ import br.com.sicredi.toolschallenge.estorno.dto.EstornoRequestDTO;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoResponseDTO;
 import br.com.sicredi.toolschallenge.estorno.events.EstornoCriadoEvento;
 import br.com.sicredi.toolschallenge.estorno.events.EstornoStatusAlteradoEvento;
+import br.com.sicredi.toolschallenge.shared.config.ReprocessamentoProperties;
 import org.springframework.context.ApplicationEventPublisher;
 import br.com.sicredi.toolschallenge.infra.outbox.publisher.EventoPublisher;
 import br.com.sicredi.toolschallenge.estorno.repository.EstornoRepository;
@@ -70,6 +71,9 @@ class EstornoServiceTest {
     @Mock
     private AdquirenteService adquirenteService;
 
+    @Mock
+    private ReprocessamentoProperties reprocessamentoProperties;
+
     @InjectMocks
     private EstornoService estornoService;
 
@@ -82,6 +86,9 @@ class EstornoServiceTest {
 
     @BeforeEach
     void setUp() {
+        // Configurar ReprocessamentoProperties com max 3 tentativas (lenient para testes que não usam)
+        lenient().when(reprocessamentoProperties.getMaxTentativas()).thenReturn(3);
+        
         // Request DTO
         requestDTO = new EstornoRequestDTO();
         requestDTO.setIdTransacao("TXN-123-TEST");
