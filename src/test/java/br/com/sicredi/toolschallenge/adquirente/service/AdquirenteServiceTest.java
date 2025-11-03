@@ -376,6 +376,34 @@ class AdquirenteServiceTest {
         verify(adquirenteSimulado, times(1)).autorizarPagamento(requestMaster);
     }
 
+    // ========== TESTES DE MÉTRICAS (GAUGE) ==========
+
+    @Test
+    @DisplayName("Deve registrar Gauge do Circuit Breaker com sucesso")
+    void deveRegistrarGaugeCircuitBreakerComSucesso() {
+        // Arrange: Mock CircuitBreakerRegistry e MeterRegistry
+        var circuitBreakerRegistry = mock(io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry.class);
+        var circuitBreaker = mock(io.github.resilience4j.circuitbreaker.CircuitBreaker.class);
+        var meterRegistry = mock(io.micrometer.core.instrument.MeterRegistry.class);
+        
+        when(circuitBreakerRegistry.circuitBreaker("adquirente")).thenReturn(circuitBreaker);
+        lenient().when(circuitBreaker.getState()).thenReturn(io.github.resilience4j.circuitbreaker.CircuitBreaker.State.CLOSED);
+        
+        // Criar service com dependências mockadas
+        var service = new AdquirenteService(adquirenteSimulado, meterRegistry, circuitBreakerRegistry);
+        
+        // Act: Registrar gauge
+        service.registrarMetricasCircuitBreaker();
+        
+        // Assert: Verificar que gauge foi registrado
+        verify(meterRegistry, times(1)).gauge(
+            eq("circuit.breaker.adquirente.state"), 
+            eq(circuitBreaker), 
+            any()
+        );
+        verify(circuitBreakerRegistry, times(1)).circuitBreaker("adquirente");
+    }
+
     // ========== MÉTODOS AUXILIARES PARA TESTAR FALLBACKS ==========
 
     /**

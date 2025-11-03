@@ -6,11 +6,13 @@ import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoResponse;
 import br.com.sicredi.toolschallenge.adquirente.events.AutorizacaoRealizadaEvento;
 import br.com.sicredi.toolschallenge.infra.outbox.publisher.EventoPublisher;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
 import io.micrometer.core.annotation.Counted;
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -43,11 +45,45 @@ public class AdquirenteService {
 
     private final AdquirenteSimuladoService adquirenteSimulado;
     private final MeterRegistry meterRegistry;
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
     private EventoPublisher eventoPublisher;  // Removido 'final' para permitir @Autowired opcional
 
-    public AdquirenteService(AdquirenteSimuladoService adquirenteSimulado, MeterRegistry meterRegistry) {
+    public AdquirenteService(
+            AdquirenteSimuladoService adquirenteSimulado, 
+            MeterRegistry meterRegistry,
+            CircuitBreakerRegistry circuitBreakerRegistry) {
         this.adquirenteSimulado = adquirenteSimulado;
         this.meterRegistry = meterRegistry;
+        this.circuitBreakerRegistry = circuitBreakerRegistry;
+    }
+    
+    /**
+     * Registra Gauge para monitorar estado do Circuit Breaker em tempo real.
+     * 
+     * Estados:
+     * - 0 = CLOSED (funcionando normalmente)
+     * - 1 = OPEN (circuito aberto, bloqueando chamadas)
+     * - 2 = HALF_OPEN (testando se serviço voltou)
+     * - 3 = DISABLED
+     * - 4 = FORCED_OPEN
+     * - 5 = METRICS_ONLY
+     */
+    @PostConstruct
+    public void registrarMetricasCircuitBreaker() {
+        var circuitBreaker = circuitBreakerRegistry.circuitBreaker("adquirente");
+        
+        meterRegistry.gauge("circuit.breaker.adquirente.state", circuitBreaker, cb -> {
+            return switch (cb.getState()) {
+                case CLOSED -> 0;
+                case OPEN -> 1;
+                case HALF_OPEN -> 2;
+                case DISABLED -> 3;
+                case FORCED_OPEN -> 4;
+                case METRICS_ONLY -> 5;
+            };
+        });
+        
+        log.info("Gauge registrado: circuit.breaker.adquirente.state");
     }
     
     /**
