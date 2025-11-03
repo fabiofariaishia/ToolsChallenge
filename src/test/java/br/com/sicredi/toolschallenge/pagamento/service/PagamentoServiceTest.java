@@ -9,6 +9,8 @@ import br.com.sicredi.toolschallenge.infra.outbox.publisher.EventoPublisher;
 import br.com.sicredi.toolschallenge.pagamento.domain.Pagamento;
 import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
 import br.com.sicredi.toolschallenge.pagamento.repository.PagamentoRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,6 +51,12 @@ class PagamentoServiceTest {
 
     @Mock
     private ReprocessamentoProperties reprocessamentoProperties;
+
+    @Mock
+    private MeterRegistry meterRegistry;
+
+    @Mock
+    private Counter dlqCounter;
 
     @InjectMocks
     private PagamentoService pagamentoService;
@@ -296,5 +304,34 @@ class PagamentoServiceTest {
             p.getIdTransacao().equals("TXN-OK-2") && p.getStatus() == StatusPagamento.AUTORIZADO
         ));
         verify(eventoPublisher, times(1)).publicarPagamentoStatusAlterado(any());
+    }
+
+    @Test
+    @DisplayName("8. Deve incrementar métrica DLQ quando pagamento atinge máximo de tentativas")
+    void deveIncrementarMetricaDLQQuandoPagamentoAtingeMaximoTentativas() {
+        // Arrange - Configurar mock do counter DLQ (apenas neste teste)
+        when(meterRegistry.counter("reprocessamento.dlq.total", "tipo", "pagamento"))
+            .thenReturn(dlqCounter);
+        
+        // Arrange - Pagamento que já atingiu max tentativas
+        Pagamento pagamentoDLQ = new Pagamento();
+        pagamentoDLQ.setId(99L);
+        pagamentoDLQ.setIdTransacao("TXN-DLQ-METRICS");
+        pagamentoDLQ.setStatus(StatusPagamento.PENDENTE);
+        pagamentoDLQ.setTentativasReprocessamento(3); // MAX = 3
+        pagamentoDLQ.setValor(new BigDecimal("999.99"));
+
+        when(repository.findPagamentosPendentes())
+            .thenReturn(Arrays.asList(pagamentoDLQ));
+
+        // Act
+        pagamentoService.reprocessarPagamentosPendentes();
+
+        // Assert - Verificar que counter DLQ foi incrementado
+        verify(meterRegistry).counter("reprocessamento.dlq.total", "tipo", "pagamento");
+        verify(dlqCounter).increment(); // Counter foi incrementado
+        verify(repository).findPagamentosPendentes();
+        verify(adquirenteService, never()).autorizarPagamento(any()); // Não processou
+        verify(repository, never()).save(any()); // Não salvou
     }
 }

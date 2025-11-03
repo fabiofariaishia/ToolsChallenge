@@ -350,6 +350,11 @@ public class PagamentoService {
                 // Verificar se atingiu limite de tentativas (DLQ)
                 if (pagamento.getTentativasReprocessamento() >= maxTentativas) {
                     enviadosDLQ++;
+                    
+                    // Incrementar métrica de DLQ
+                    meterRegistry.counter("reprocessamento.dlq.total", 
+                        "tipo", "pagamento").increment();
+                    
                     log.warn("Pagamento {} atingiu máximo de tentativas ({}) - ENVIADO PARA DLQ - Requer análise manual",
                         pagamento.getIdTransacao(), maxTentativas);
                     continue;
