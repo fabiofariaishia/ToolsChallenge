@@ -15,6 +15,8 @@ import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoRequest;
 import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoResponse;
 import br.com.sicredi.toolschallenge.adquirente.domain.StatusAutorizacao;
 import br.com.sicredi.toolschallenge.shared.config.ReprocessamentoProperties;
+import io.micrometer.core.annotation.Counted;
+import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -72,6 +74,8 @@ public class PagamentoService {
      * @return DTO de resposta com status autorizado, negado ou pendente
      */
     @Transactional
+    @Timed(value = "pagamento.criar.latency", description = "Latência para criar pagamento")
+    @Counted(value = "pagamento.criados.total", description = "Total de pagamentos criados")
     public PagamentoResponseDTO criarPagamento(PagamentoRequestDTO request) {
         log.info("Criando novo pagamento - Valor: R$ {}, Parcelas: {}, Tipo: {}", 
             request.getValor(), request.getParcelas(), request.getTipoPagamento());

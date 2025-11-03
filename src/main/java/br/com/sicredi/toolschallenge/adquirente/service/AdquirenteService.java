@@ -8,6 +8,8 @@ import br.com.sicredi.toolschallenge.infra.outbox.publisher.EventoPublisher;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
+import io.micrometer.core.annotation.Counted;
+import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -69,6 +71,8 @@ public class AdquirenteService {
      * @param request Dados da transação
      * @return Resposta da autorização (ou PENDENTE se fallback)
      */
+    @Counted(value = "adquirente.autorizacoes.total", description = "Total de autorizações processadas")
+    @Timed(value = "adquirente.autorizacao.latency", description = "Latência de autorização com adquirente", histogram = true)
     @CircuitBreaker(name = "adquirente", fallbackMethod = "autorizarPagamentoFallback")
     @Retry(name = "adquirente")
     @Bulkhead(name = "adquirente", type = Bulkhead.Type.THREADPOOL)
@@ -112,6 +116,8 @@ public class AdquirenteService {
     /**
      * Processa estorno com mesma resiliência.
      */
+    @Counted(value = "adquirente.estornos.total", description = "Total de estornos processados")
+    @Timed(value = "adquirente.estorno.latency", description = "Latência de processamento de estorno", histogram = true)
     @CircuitBreaker(name = "adquirente", fallbackMethod = "processarEstornoFallback")
     @Retry(name = "adquirente")
     @Bulkhead(name = "adquirente", type = Bulkhead.Type.THREADPOOL)

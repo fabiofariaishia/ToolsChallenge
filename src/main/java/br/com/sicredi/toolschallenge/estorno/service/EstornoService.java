@@ -19,6 +19,8 @@ import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoRequest;
 import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoResponse;
 import br.com.sicredi.toolschallenge.adquirente.domain.StatusAutorizacao;
 import br.com.sicredi.toolschallenge.shared.config.ReprocessamentoProperties;
+import io.micrometer.core.annotation.Counted;
+import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -92,6 +94,8 @@ public class EstornoService {
      * @throws NegocioException se validações falharem ou timeout ao adquirir lock
      */
     @Transactional
+    @Timed(value = "estorno.processar.latency", description = "Latência para processar estorno")
+    @Counted(value = "estorno.processados.total", description = "Total de estornos processados")
     public EstornoResponseDTO criarEstorno(EstornoRequestDTO request) {
         String idTransacao = request.getIdTransacao();
         log.info("Criando estorno para transação: {}", idTransacao);
