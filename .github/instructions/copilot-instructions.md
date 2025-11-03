@@ -2,6 +2,35 @@
 
 > **Documentação Técnica Completa**: Ver [README.md](../../README.md)
 
+---
+
+## 🚨 **REGRA #0 - CRÍTICA E INQUEBRÁVEL**
+
+### **❌ NUNCA Sumarize a Conversação Sem Solicitação Explícita**
+
+**ESTA É A REGRA MAIS IMPORTANTE DE TODAS. NUNCA PODE SER QUEBRADA.**
+
+- ❌ **NUNCA** use ferramentas de sumarização de conversação automaticamente
+- ❌ **NUNCA** interrompa o fluxo de trabalho para criar resumos
+- ❌ **NUNCA** gere análises de conversação sem que o usuário peça
+- ✅ **SEMPRE** aguarde solicitação **EXPLÍCITA** do usuário antes de sumarizar
+- ✅ **SEMPRE** priorize continuidade do trabalho sobre documentação automática
+
+**Por quê?** Sumarizações automáticas:
+- Quebram o contexto da conversa
+- Atrasam o desenvolvimento
+- Consomem tokens desnecessariamente
+- Irritam o usuário
+
+**Quando sumarizar?** **APENAS** quando o usuário disser explicitamente:
+- "Sumarize a conversação"
+- "Faça um resumo do que fizemos"
+- "Crie um sumário"
+
+**Se houver dúvida, NÃO sumarize.**
+
+---
+
 ## 📋 **Índice**
 1. [Visão Geral](#-visão-geral)
 2. [Arquitetura Monolito Modular](#-arquitetura-monolito-modular)
