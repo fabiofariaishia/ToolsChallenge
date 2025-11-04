@@ -94,9 +94,6 @@ class EstornoServiceTest {
 
     @BeforeEach
     void setUp() {
-        // Configurar ReprocessamentoProperties com max 3 tentativas (lenient para testes que não usam)
-        lenient().when(reprocessamentoProperties.getMaxTentativas()).thenReturn(3);
-        
         // Request DTO
         requestDTO = new EstornoRequestDTO();
         requestDTO.setIdTransacao("TXN-123-TEST");
@@ -560,6 +557,8 @@ class EstornoServiceTest {
     @DisplayName("16. Deve reprocessar estorno PENDENTE com sucesso → CANCELADO")
     void deveReprocessarEstornoPendenteComSucesso() {
         // Arrange
+        when(reprocessamentoProperties.getMaxTentativas()).thenReturn(3);
+        
         Estorno estornoPendente = new Estorno();
         estornoPendente.setId(1L);
         estornoPendente.setIdEstorno("EST-001");
@@ -593,6 +592,8 @@ class EstornoServiceTest {
     @DisplayName("17. Deve reprocessar estorno PENDENTE com falha → PENDENTE (incrementa tentativas)")
     void deveReprocessarEstornoPendenteComFalha() {
         // Arrange
+        when(reprocessamentoProperties.getMaxTentativas()).thenReturn(3);
+        
         Estorno estornoPendente = new Estorno();
         estornoPendente.setId(1L);
         estornoPendente.setIdEstorno("EST-002");
@@ -626,6 +627,8 @@ class EstornoServiceTest {
     @DisplayName("18. Não deve reprocessar estorno com max tentativas atingidas (DLQ)")
     void naoDeveReprocessarEstornoComMaxTentativas() {
         // Arrange
+        when(reprocessamentoProperties.getMaxTentativas()).thenReturn(3);
+        
         Estorno estornoDLQ = new Estorno();
         estornoDLQ.setId(1L);
         estornoDLQ.setIdEstorno("EST-DLQ");

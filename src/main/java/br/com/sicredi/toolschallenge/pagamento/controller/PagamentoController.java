@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -50,9 +51,10 @@ public class PagamentoController {
      */
     @PostMapping
     @Idempotente(ttl = 24, unidadeTempo = TimeUnit.HOURS)
+    @PreAuthorize("hasAuthority('pagamentos:write')")
     @Operation(
         summary = "Criar novo pagamento",
-        description = "Cria uma nova transação de pagamento e retorna o resultado da autorização. Requer header 'Idempotency-Key' para evitar duplicação."
+        description = "Cria uma nova transação de pagamento e retorna o resultado da autorização. Requer header 'Chave-Idempotencia' para evitar duplicação."
     )
     @ApiResponses({
         @ApiResponse(
@@ -62,7 +64,7 @@ public class PagamentoController {
         ),
         @ApiResponse(
             responseCode = "400",
-            description = "Dados inválidos na requisição ou header 'Idempotency-Key' ausente"
+            description = "Dados inválidos na requisição ou header 'Chave-Idempotencia' ausente"
         ),
         @ApiResponse(
             responseCode = "500",
@@ -70,6 +72,8 @@ public class PagamentoController {
         )
     })
     public ResponseEntity<PagamentoResponseDTO> criarPagamento(
+        @Parameter(description = "Chave de idempotência para evitar duplicatas", required = true)
+        @RequestHeader(value = "Chave-Idempotencia", required = true) String chaveIdempotencia,
         @Valid @RequestBody PagamentoRequestDTO request
     ) {
         log.info("POST /pagamentos - Criando novo pagamento");
@@ -91,6 +95,7 @@ public class PagamentoController {
      * @return 200 OK com DTO de resposta ou 404 Not Found
      */
     @GetMapping("/{idTransacao}")
+    @PreAuthorize("hasAuthority('pagamentos:read')")
     @Operation(
         summary = "Consultar pagamento por ID",
         description = "Busca um pagamento específico pelo seu ID de transação"
@@ -123,6 +128,7 @@ public class PagamentoController {
      * @return 200 OK com lista de DTOs
      */
     @GetMapping
+    @PreAuthorize("hasAuthority('pagamentos:read')")
     @Operation(
         summary = "Listar todos os pagamentos",
         description = "Retorna os últimos 100 pagamentos ordenados por data de criação (mais recentes primeiro)"
@@ -148,6 +154,7 @@ public class PagamentoController {
      * @return 200 OK com lista de DTOs
      */
     @GetMapping("/status/{status}")
+    @PreAuthorize("hasAuthority('pagamentos:read')")
     @Operation(
         summary = "Listar pagamentos por status",
         description = "Retorna pagamentos filtrados por status específico"

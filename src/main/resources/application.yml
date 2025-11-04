@@ -119,17 +119,19 @@ resilience4j:
         # Timeout para aguardar thread disponível
         keep-alive-duration: 20ms
 
-# Configuração do Adquirente Simulado (Chaos Engineering)
+# Configuração do Adquirente Simulado
+# NOTA: Chaos Engineering desabilitado para MVP
+# Para testar resiliência, altere failure-rate/timeout-rate para valores > 0
 adquirente:
   simulado:
-    # Taxa de falhas (0.0 a 1.0) - 0.8 = 80% de falhas (TESTE CIRCUIT BREAKER)
-    failure-rate: 0.1
-    # Latência artificial em ms (simula lentidão)
+    # Taxa de falhas (0.0 a 1.0) - 0.0 = sem falhas (MVP)
+    failure-rate: 0.0
+    # Latência artificial em ms (simula lentidão realista)
     latency-ms: 100
-    # Taxa de timeouts extremos (0.0 a 1.0) - 0.1 = 10% timeouts
-    timeout-rate: 0.05
-    # Taxa de aprovação quando disponível (0.9 = 90% aprovado)
-    aprovacao-rate: 0.9
+    # Taxa de timeouts extremos (0.0 a 1.0) - 0.0 = sem timeouts (MVP)
+    timeout-rate: 0.0
+    # Taxa de aprovação quando disponível (1.0 = 100% aprovado para MVP)
+    aprovacao-rate: 1.0
 
 # Configuração de Reprocessamento de Transações Pendentes
 reprocessamento:
@@ -149,6 +151,17 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     enabled: true
+
+# JWT (Autenticação)
+jwt:
+  # Chave secreta para assinatura HS256 (DEVE ser variável de ambiente em produção!)
+  # IMPORTANTE: Gerar chave aleatória de 256+ bits (32+ caracteres)
+  # Exemplo de geração: openssl rand -base64 32
+  secret: "toolschallenge-secret-key-change-in-production-256bits-minimum"
+  # Expiração do token: 30 dias (2592000000ms)
+  expiration-ms: 2592000000
+  # Issuer (emissor do token)
+  issuer: "toolschallenge-api"
 
 # Logging
 logging:

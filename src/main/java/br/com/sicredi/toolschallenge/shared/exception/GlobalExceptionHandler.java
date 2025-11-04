@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -184,6 +186,54 @@ public class GlobalExceptionHandler {
         resposta.setTraceId(traceId);
         
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(resposta);
+    }
+    
+    /**
+     * Trata exceções de autenticação (token ausente, inválido, expirado)
+     * Retorna 401 Unauthorized
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErroResposta> tratarErroAutenticacao(
+            AuthenticationException ex,
+            HttpServletRequest request) {
+        
+        String traceId = gerarTraceId();
+        logger.warn("[{}] Falha de autenticação: {} na requisição: {}", 
+                traceId, ex.getMessage(), request.getRequestURI());
+        
+        ErroResposta resposta = new ErroResposta(
+                HttpStatus.UNAUTHORIZED.value(),
+                HttpStatus.UNAUTHORIZED.getReasonPhrase(),
+                "Token inválido ou ausente. Por favor, forneça um token JWT válido no header 'Authorization: Bearer <token>'.",
+                request.getRequestURI()
+        );
+        resposta.setTraceId(traceId);
+        
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(resposta);
+    }
+    
+    /**
+     * Trata exceções de autorização (escopos insuficientes)
+     * Retorna 403 Forbidden
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErroResposta> tratarErroAutorizacao(
+            AccessDeniedException ex,
+            HttpServletRequest request) {
+        
+        String traceId = gerarTraceId();
+        logger.warn("[{}] Acesso negado: {} na requisição: {}", 
+                traceId, ex.getMessage(), request.getRequestURI());
+        
+        ErroResposta resposta = new ErroResposta(
+                HttpStatus.FORBIDDEN.value(),
+                HttpStatus.FORBIDDEN.getReasonPhrase(),
+                "Acesso negado: escopos insuficientes. Você não tem permissão para acessar este recurso.",
+                request.getRequestURI()
+        );
+        resposta.setTraceId(traceId);
+        
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(resposta);
     }
     
     /**

@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -49,9 +50,10 @@ public class EstornoController {
      */
     @PostMapping
     @Idempotente(ttl = 24, unidadeTempo = TimeUnit.HOURS)
+    @PreAuthorize("hasAuthority('estornos:write')")
     @Operation(
         summary = "Criar novo estorno",
-        description = "Solicita o estorno de um pagamento autorizado. Apenas estorno total é permitido, dentro de 24 horas. Requer header 'Idempotency-Key'."
+        description = "Solicita o estorno de um pagamento autorizado. Apenas estorno total é permitido, dentro de 24 horas. Requer header 'Chave-Idempotencia'."
     )
     @ApiResponses({
         @ApiResponse(
@@ -61,7 +63,7 @@ public class EstornoController {
         ),
         @ApiResponse(
             responseCode = "400",
-            description = "Dados inválidos (valor incorreto, pagamento não encontrado, header 'Idempotency-Key' ausente, etc.)"
+            description = "Dados inválidos (valor incorreto, pagamento não encontrado, header 'Chave-Idempotencia' ausente, etc.)"
         ),
         @ApiResponse(
             responseCode = "409",
@@ -73,6 +75,8 @@ public class EstornoController {
         )
     })
     public ResponseEntity<EstornoResponseDTO> criarEstorno(
+        @Parameter(description = "Chave de idempotência para evitar duplicatas", required = true)
+        @RequestHeader(value = "Chave-Idempotencia", required = true) String chaveIdempotencia,
         @Valid @RequestBody EstornoRequestDTO request
     ) {
         log.info("POST /estornos - Criando estorno para pagamento: {}", request.getIdTransacao());
@@ -94,6 +98,7 @@ public class EstornoController {
      * @return 200 OK com DTO de resposta ou 404 Not Found
      */
     @GetMapping("/{idEstorno}")
+    @PreAuthorize("hasAuthority('estornos:read')")
     @Operation(
         summary = "Consultar estorno por ID",
         description = "Busca um estorno específico pelo seu ID único"
@@ -127,6 +132,7 @@ public class EstornoController {
      * @return 200 OK com lista de DTOs
      */
     @GetMapping("/pagamento/{idTransacao}")
+    @PreAuthorize("hasAuthority('estornos:read')")
     @Operation(
         summary = "Listar estornos de um pagamento",
         description = "Retorna todos os estornos (tentativas) relacionados a um pagamento específico"
@@ -154,6 +160,7 @@ public class EstornoController {
      * @return 200 OK com lista de DTOs
      */
     @GetMapping
+    @PreAuthorize("hasAuthority('estornos:read')")
     @Operation(
         summary = "Listar todos os estornos",
         description = "Retorna os últimos 100 estornos ordenados por data de criação (mais recentes primeiro)"
@@ -179,6 +186,7 @@ public class EstornoController {
      * @return 200 OK com lista de DTOs
      */
     @GetMapping("/status/{status}")
+    @PreAuthorize("hasAuthority('estornos:read')")
     @Operation(
         summary = "Listar estornos por status",
         description = "Retorna estornos filtrados por status específico"

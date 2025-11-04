@@ -857,6 +857,179 @@ class PagamentoIntegrationTest {
 }
 ```
 
+### Testes com Spring Security
+
+O projeto implementa testes de API com **Spring Security** e **JWT** usando duas abordagens:
+
+#### **1. Testes Unitários (@WebMvcTest)**
+
+Testes de **slice** focados na camada de controller, com **mocks** de dependências de segurança.
+
+**Características**:
+- ✅ **Rápidos** (< 1 segundo)
+- ✅ **Isolados** (sem infraestrutura externa)
+- ✅ **Focados** (apenas controller + validation + exception handling)
+- ✅ **Sem mocks de Service** (testam lógica de negócio separadamente)
+
+**Configuração**:
+
+```java
+@WebMvcTest(controllers = EstornoController.class)
+@AutoConfigureMockMvc(addFilters = false)  // Desabilita filtros HTTP (JWT, CSRF)
+@Import(GlobalExceptionHandler.class)      // Carrega exception handler
+@WithMockUser(authorities = {"estornos:read", "estornos:write"})  // Simula usuário autenticado
+class EstornoControllerTest {
+    
+    @MockBean private EstornoService estornoService;
+    @MockBean private IdempotenciaService idempotenciaService;
+    
+    // Mocks de Security necessários (são @Component escaneados pelo Spring)
+    @MockBean private JwtService jwtService;
+    @MockBean private JwtAuthenticationFilter jwtAuthenticationFilter;
+    
+    @Test
+    void deveCriarEstornoComSucesso() throws Exception {
+        // Arrange
+        EstornoRequestDTO request = ...;
+        when(estornoService.criar(any())).thenReturn(response);
+        
+        // Act & Assert
+        mockMvc.perform(post("/estornos")
+                .header("Chave-Idempotencia", UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").exists());
+    }
+}
+```
+
+**Por que mockar `JwtService` e `JwtAuthenticationFilter`?**
+
+- São classes anotadas com `@Component`, portanto Spring sempre tenta instanciá-las
+- `@AutoConfigureMockMvc(addFilters = false)` apenas desabilita **execução** dos filtros no MockMvc
+- **NÃO** impede o Spring de escanear e criar os beans durante inicialização do contexto
+- Sem `@MockBean`, ApplicationContext falha com `NoSuchBeanDefinitionException`
+
+**Quando usar**:
+- ✅ Validar status HTTP corretos (201, 400, 404, etc)
+- ✅ Validar serialização JSON de request/response
+- ✅ Validar Bean Validation (`@NotBlank`, `@Size`, etc)
+- ✅ Validar tratamento de exceções via `@ControllerAdvice`
+- ❌ **Não testar**: Autenticação JWT real, autorização por scopes, integração com banco
+
+#### **2. Testes de Integração (@SpringBootTest)**
+
+Testes **end-to-end** com contexto completo da aplicação e infraestrutura real.
+
+**Características**:
+- ⏳ **Lentos** (> 5 segundos - subir containers Docker)
+- ⏳ **Complexos** (PostgreSQL + Redis + Kafka via Testcontainers)
+- ✅ **Reais** (testa TODO o fluxo: JWT → Filter → Controller → Service → Repository)
+- ✅ **Confiáveis** (se passar, funciona em produção)
+
+**Configuração**:
+
+```java
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureMockMvc
+@Testcontainers
+class SecurityIntegrationTest {
+    
+    @Container
+    static PostgreSQLContainer<?> postgres = ...;
+    
+    @Container
+    static GenericContainer<?> redis = ...;
+    
+    @Autowired
+    private MockMvc mockMvc;
+    
+    @Autowired
+    private JwtService jwtService;
+    
+    private String validToken;
+    
+    @BeforeEach
+    void setUp() {
+        // Gerar token JWT REAL com scopes necessários
+        Map<String, Object> claims = Map.of(
+            "scopes", List.of("estornos:read", "estornos:write")
+        );
+        validToken = jwtService.generateToken(claims, "integration-test");
+    }
+    
+    @Test
+    void deveRetornar401QuandoTokenAusente() throws Exception {
+        mockMvc.perform(post("/estornos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isUnauthorized());
+    }
+    
+    @Test
+    void deveRetornar403QuandoTokenSemScopes() throws Exception {
+        // Token VÁLIDO mas SEM scopes necessários
+        Map<String, Object> claims = Map.of("scopes", List.of("pagamentos:read"));
+        String tokenSemScopes = jwtService.generateToken(claims, "test");
+        
+        mockMvc.perform(post("/estornos")
+                .header("Authorization", "Bearer " + tokenSemScopes)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isForbidden());
+    }
+    
+    @Test
+    void deveCriarEstornoComTokenValido() throws Exception {
+        // Token VÁLIDO com scopes corretos
+        mockMvc.perform(post("/estornos")
+                .header("Authorization", "Bearer " + validToken)
+                .header("Chave-Idempotencia", UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validRequestJson))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.id").exists());
+    }
+}
+```
+
+**Quando usar**:
+- ✅ Validar autenticação JWT real (401, 403)
+- ✅ Validar autorização por scopes (`@PreAuthorize`)
+- ✅ Validar idempotência real com Redis
+- ✅ Validar integração completa (API → Service → Repository → DB)
+- ✅ **Smoke tests** antes de deploy em produção
+
+#### **Comparação: @WebMvcTest vs @SpringBootTest**
+
+| Aspecto | @WebMvcTest (Unit) | @SpringBootTest (Integration) |
+|---------|-------------------|------------------------------|
+| **Velocidade** | ⚡ < 1s | ⏳ > 5s (Testcontainers) |
+| **Escopo** | 🎯 Controller apenas | 🌍 Aplicação completa |
+| **Dependências** | 🎭 Mocks (`@MockBean`) | ✅ Reais (banco, Redis, Kafka) |
+| **Security** | 🎭 `@WithMockUser` (simula) | ✅ JWT real via `JwtService` |
+| **Quando rodar** | ✅ A cada commit | ✅ Antes de merge/deploy |
+| **Finalidade** | Validar contrato API | Validar funcionamento real |
+
+```java
+@SpringBootTest
+@Testcontainers
+class PagamentoIntegrationTest {
+    
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
+    
+    @Container
+    static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"));
+    
+    @Test
+    void deveCriarPagamentoComSucesso() {
+        // ...
+    }
+}
+```
+
 ### Executar Testes
 
 ```bash
