@@ -467,6 +467,114 @@ resilience4j:
 
 ## 📊 Observabilidade
 
+### URLs de Acesso
+
+| Serviço | URL | Credenciais |
+|---------|-----|-------------|
+| **Grafana** | http://localhost:3000 | admin / admin123 |
+| **Jaeger** | http://localhost:16686 | - |
+| **Prometheus** | http://localhost:9090 | - |
+| **Actuator** | http://localhost:8080/atuador | - |
+| **Swagger** | http://localhost:8080/swagger-ui.html | - |
+
+### Dashboards Grafana
+
+#### Dashboards Community (3)
+
+1. **JVM Micrometer** (UID: `jvm_micrometer_dashboard`)
+   - Memory pools (heap, non-heap, eden, survivor, old gen)
+   - Garbage collection (count, pause time)
+   - Threads (live, daemon, peak)
+   - CPU usage
+
+2. **Spring Boot Statistics** (UID: `spring_boot_21`)
+   - HTTP metrics (requests, latency, errors)
+   - Logback logs by level
+   - JVM stats (memory, GC, threads)
+   - Tomcat metrics (sessions, threads)
+
+3. **Resilience4j** (UID: `resilience4j_dashboard`)
+   - Circuit Breaker states/calls
+   - Retry attempts/failures
+   - Bulkhead capacity/usage
+   - Rate Limiter metrics
+
+#### Dashboards Customizados (2)
+
+**1. HTTP Metrics** (UID: `http_metrics_toolschallenge`)
+
+Painéis (7):
+- **Request Rate by Endpoint**: Taxa de requisições por URI
+- **Latency Percentiles**: p50, p95, p99 por endpoint
+- **Error Rates**: 4xx vs 5xx separados
+- **Throughput by Endpoint**: Requests/segundo por URI e método
+- **Success Rate Gauge**: % requisições bem-sucedidas (não 5xx)
+- **Overall p99 Latency Gauge**: Latência p99 global
+- **Status Code Distribution**: Pie chart de status codes
+
+**2. Business Metrics** (UID: `business_metrics_toolschallenge`)
+
+Painéis (11):
+- **Pagamentos Rate by Status**: Rate criação por status (color-coded)
+- **Estornos Rate by Status**: Rate criação por status (color-coded)
+- **Circuit Breaker State Gauge**: 0=CLOSED, 1=OPEN, 2=HALF_OPEN
+- **DLQ Rate by Type**: Rate envio para DLQ (pagamento vs estorno)
+- **DLQ Total Last Hour**: Total enviado para DLQ na última hora
+- **Pagamento Latency Percentiles**: p50/p95/p99 de criação
+- **Estorno Latency Percentiles**: p50/p95/p99 de criação
+- **Pagamentos Last Hour**: Stat panel com total última hora
+- **Estornos Last Hour**: Stat panel com total última hora
+- **Pagamento Approval Rate**: % autorizados (gauge com thresholds)
+- **Estorno Success Rate**: % cancelados (gauge com thresholds)
+
+**Features**:
+- Auto-refresh: 5 segundos
+- Template variable: `$application`
+- Color coding: Verde=sucesso, Vermelho=erro, Amarelo=pendente
+
+### Métricas Customizadas
+
+| Métrica | Tipo | Descrição | Tags |
+|---------|------|-----------|------|
+| `pagamento_criados_total` | Counter | Total de pagamentos criados | `status` (AUTORIZADO, NEGADO, PENDENTE) |
+| `estorno_criados_total` | Counter | Total de estornos criados | `status` (CANCELADO, NEGADO, PENDENTE) |
+| `circuit_breaker_adquirente_state` | Gauge | Estado do Circuit Breaker | - (0=CLOSED, 1=OPEN, 2=HALF_OPEN) |
+| `reprocessamento_dlq_total` | Counter | Total enviado para DLQ | `tipo` (pagamento, estorno) |
+| `pagamento_criar_latency_seconds` | Histogram | Latência criação pagamento | - |
+| `estorno_criar_latency_seconds` | Histogram | Latência criação estorno | - |
+
+### Exemplos de Queries PromQL
+
+**Taxa de Criação de Pagamentos (últimos 5min)**:
+```promql
+sum(rate(pagamento_criados_total{application="toolschallenge"}[5m])) by (status)
+```
+
+**Latência p99 de Pagamentos**:
+```promql
+histogram_quantile(0.99, sum(rate(pagamento_criar_latency_seconds_bucket{application="toolschallenge"}[5m])) by (le))
+```
+
+**Taxa de Aprovação de Pagamentos**:
+```promql
+sum(rate(pagamento_criados_total{application="toolschallenge", status="AUTORIZADO"}[5m])) / sum(rate(pagamento_criados_total{application="toolschallenge"}[5m]))
+```
+
+**Estado do Circuit Breaker**:
+```promql
+circuit_breaker_adquirente_state{application="toolschallenge"}
+```
+
+**DLQ Rate por Tipo**:
+```promql
+sum(rate(reprocessamento_dlq_total{application="toolschallenge"}[5m])) by (tipo)
+```
+
+**Latência HTTP p95**:
+```promql
+histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{application="toolschallenge"}[5m])) by (le, uri))
+```
+
 ### Actuator Endpoints
 
 **Configuração**:
@@ -494,16 +602,38 @@ management:
 | `/atuador/circuitbreakerevents` | Histórico de eventos CB |
 | `/atuador/info` | Informações da aplicação |
 
-### Prometheus Metrics
+### Prometheus Target Status
 
-**Métricas Principais**:
+**Validação**:
 
-- `http_server_requests_seconds` - Latência de requisições
-- `resilience4j_circuitbreaker_state` - Estado do CB (0=CLOSED, 1=OPEN, 2=HALF_OPEN)
-- `resilience4j_circuitbreaker_failure_rate` - Taxa de falhas
-- `resilience4j_retry_calls` - Número de retries
-- `jvm_memory_used_bytes` - Uso de memória
-- `hikaricp_connections_active` - Conexões DB ativas
+```bash
+curl http://localhost:9090/api/v1/targets
+```
+
+**Target esperado**:
+- Job: `toolschallenge-api`
+- Instance: `host.docker.internal:8080`
+- Health: `up`
+- Scrape interval: `10s`
+- Endpoint: `/atuador/prometheus`
+
+### Jaeger Distributed Tracing
+
+**Validação**:
+
+1. Acessar http://localhost:16686
+2. Selecionar service: `toolschallenge` (quando aplicação estiver rodando)
+3. Buscar traces recentes
+4. Verificar spans:
+   - HTTP request span (entry point)
+   - PagamentoService.criar span
+   - AdquirenteService.autorizarPagamento span
+5. Correlation ID aparece em baggage
+
+**Exemplo de Trace**:
+- TraceID: `a288846ddd700e050fba89e5de93c326`
+- SpanID: `844e1ea47a07d098`
+- CorrelationID: `d4c062ef-77ba-489f-9a05-86850c76fc90`
 
 ### Swagger UI
 

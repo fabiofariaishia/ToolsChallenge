@@ -123,11 +123,11 @@ resilience4j:
 adquirente:
   simulado:
     # Taxa de falhas (0.0 a 1.0) - 0.8 = 80% de falhas (TESTE CIRCUIT BREAKER)
-    failure-rate: 0.8
+    failure-rate: 0.1
     # Latência artificial em ms (simula lentidão)
     latency-ms: 100
     # Taxa de timeouts extremos (0.0 a 1.0) - 0.1 = 10% timeouts
-    timeout-rate: 0.1
+    timeout-rate: 0.05
     # Taxa de aprovação quando disponível (0.9 = 90% aprovado)
     aprovacao-rate: 0.9
 
