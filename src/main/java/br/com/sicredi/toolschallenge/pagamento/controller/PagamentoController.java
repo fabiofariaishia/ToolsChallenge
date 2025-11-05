@@ -69,12 +69,19 @@ public class PagamentoController {
                     description = "Pagamento único sem parcelamento",
                     value = """
                         {
-                          "valor": 150.50,
-                          "moeda": "BRL",
-                          "estabelecimento": "Supermercado Exemplo Ltda",
-                          "tipoPagamento": "AVISTA",
-                          "parcelas": 1,
-                          "cartaoMascarado": "4111********1111"
+                          "transacao": {
+                            "cartao": "4444********1234",
+                            "id": "10002356890001",
+                            "descricao": {
+                              "valor": "500.50",
+                              "dataHora": "01/05/2021 18:30:00",
+                              "estabelecimento": "PetShop Mundo cão"
+                            },
+                            "formaPagamento": {
+                              "tipo": "AVISTA",
+                              "parcelas": "1"
+                            }
+                          }
                         }
                         """
                 ),
@@ -84,12 +91,19 @@ public class PagamentoController {
                     description = "Pagamento em 3 parcelas sem juros (loja)",
                     value = """
                         {
-                          "valor": 300.00,
-                          "moeda": "BRL",
-                          "estabelecimento": "Loja de Eletrônicos XYZ",
-                          "tipoPagamento": "PARCELADO_LOJA",
-                          "parcelas": 3,
-                          "cartaoMascarado": "5555********4444"
+                          "transacao": {
+                            "cartao": "5555********4444",
+                            "id": "10002356890002",
+                            "descricao": {
+                              "valor": "300.00",
+                              "dataHora": "04/11/2025 10:15:00",
+                              "estabelecimento": "Loja de Eletrônicos XYZ"
+                            },
+                            "formaPagamento": {
+                              "tipo": "PARCELADO_LOJA",
+                              "parcelas": "3"
+                            }
+                          }
                         }
                         """
                 )
@@ -133,7 +147,7 @@ public class PagamentoController {
         PagamentoResponseDTO response = service.criarPagamento(request);
         
         log.info("Pagamento criado: {} - Status: {}", 
-            response.getIdTransacao(), response.getStatus());
+            response.getTransacao().getId(), response.getTransacao().getStatus());
         
         return ResponseEntity
             .status(HttpStatus.CREATED)

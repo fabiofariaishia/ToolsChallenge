@@ -6,6 +6,14 @@ import org.springframework.stereotype.Component;
 /**
  * Mapper manual para conversão entre Entidade e DTOs.
  * 
+ * Mapeia estrutura aninhada:
+ * - transacao.cartao → entity.cartaoMascarado
+ * - transacao.id → entity.idTransacao
+ * - transacao.descricao.valor → entity.valor
+ * - transacao.descricao.dataHora → entity.dataHora
+ * - transacao.descricao.estabelecimento → entity.estabelecimento
+ * - transacao.formaPagamento.tipo → entity.tipoPagamento
+ * - transacao.formaPagamento.parcelas → entity.parcelas
  */
 @Component
 public class PagamentoMapper {
@@ -17,17 +25,23 @@ public class PagamentoMapper {
      * @return Entidade Pagamento (sem ID, status=PENDENTE)
      */
     public Pagamento toEntity(PagamentoRequestDTO dto) {
-        if (dto == null) {
+        if (dto == null || dto.getTransacao() == null) {
             return null;
         }
 
+        TransacaoDTO transacao = dto.getTransacao();
+        DescricaoDTO descricao = transacao.getDescricao();
+        FormaPagamentoDTO formaPagamento = transacao.getFormaPagamento();
+
         return Pagamento.builder()
-            .valor(dto.getValor())
-            .moeda(dto.getMoeda())
-            .estabelecimento(dto.getEstabelecimento())
-            .tipoPagamento(dto.getTipoPagamento())
-            .parcelas(dto.getParcelas())
-            .cartaoMascarado(dto.getCartaoMascarado())
+            .cartaoMascarado(transacao.getCartao())
+            .idTransacao(transacao.getId())
+            .valor(descricao != null ? descricao.getValor() : null)
+            .moeda("BRL") // Default moeda BRL
+            .dataHora(descricao != null ? descricao.getDataHora() : null)
+            .estabelecimento(descricao != null ? descricao.getEstabelecimento() : null)
+            .tipoPagamento(formaPagamento != null ? formaPagamento.getTipo() : null)
+            .parcelas(formaPagamento != null ? formaPagamento.getParcelas() : null)
             .build();
     }
 
@@ -35,42 +49,40 @@ public class PagamentoMapper {
      * Converte entidade para DTO de response.
      * 
      * @param entity Entidade Pagamento
-     * @return DTO de resposta
+     * @return DTO de resposta com estrutura aninhada TransacaoDTO
      */
     public PagamentoResponseDTO toDTO(Pagamento entity) {
         if (entity == null) {
             return null;
         }
 
-        return PagamentoResponseDTO.builder()
-            .idTransacao(entity.getIdTransacao())
-            .status(entity.getStatus())
+        // Criar DescricaoDTO
+        DescricaoDTO descricao = DescricaoDTO.builder()
             .valor(entity.getValor())
-            .moeda(entity.getMoeda())
             .dataHora(entity.getDataHora())
             .estabelecimento(entity.getEstabelecimento())
-            .tipoPagamento(entity.getTipoPagamento())
+            .build();
+
+        // Criar FormaPagamentoDTO
+        FormaPagamentoDTO formaPagamento = FormaPagamentoDTO.builder()
+            .tipo(entity.getTipoPagamento())
             .parcelas(entity.getParcelas())
+            .build();
+
+        // Criar TransacaoDTO com todos os dados
+        TransacaoDTO transacao = TransacaoDTO.builder()
+            .cartao(entity.getCartaoMascarado())
+            .id(entity.getIdTransacao())
+            .descricao(descricao)
+            .formaPagamento(formaPagamento)
             .nsu(entity.getNsu())
             .codigoAutorizacao(entity.getCodigoAutorizacao())
-            .cartaoMascarado(entity.getCartaoMascarado())
-            .criadoEm(entity.getCriadoEm())
-            .atualizadoEm(entity.getAtualizadoEm())
+            .status(entity.getStatus())
             .build();
-    }
 
-    /**
-     * Converte entidade para DTO de response com mensagem customizada.
-     * 
-     * @param entity Entidade Pagamento
-     * @param mensagem Mensagem adicional
-     * @return DTO de resposta com mensagem
-     */
-    public PagamentoResponseDTO toDTO(Pagamento entity, String mensagem) {
-        PagamentoResponseDTO dto = toDTO(entity);
-        if (dto != null) {
-            dto.setMensagem(mensagem);
-        }
-        return dto;
+        // Retornar PagamentoResponseDTO com TransacaoDTO aninhado
+        return PagamentoResponseDTO.builder()
+            .transacao(transacao)
+            .build();
     }
 }

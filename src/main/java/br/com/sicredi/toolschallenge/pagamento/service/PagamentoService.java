@@ -78,7 +78,9 @@ public class PagamentoService {
     @Counted(value = "pagamento.criados.total", description = "Total de pagamentos criados")
     public PagamentoResponseDTO criarPagamento(PagamentoRequestDTO request) {
         log.info("Criando novo pagamento - Valor: R$ {}, Parcelas: {}, Tipo: {}", 
-            request.getValor(), request.getParcelas(), request.getTipoPagamento());
+            request.getTransacao().getDescricao().getValor(), 
+            request.getTransacao().getFormaPagamento().getParcelas(), 
+            request.getTransacao().getFormaPagamento().getTipo());
 
         // Converter DTO para entidade
         Pagamento pagamento = mapper.toEntity(request);

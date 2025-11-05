@@ -2,8 +2,7 @@ package br.com.sicredi.toolschallenge.pagamento.controller;
 
 import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
 import br.com.sicredi.toolschallenge.pagamento.domain.TipoPagamento;
-import br.com.sicredi.toolschallenge.pagamento.dto.PagamentoRequestDTO;
-import br.com.sicredi.toolschallenge.pagamento.dto.PagamentoResponseDTO;
+import br.com.sicredi.toolschallenge.pagamento.dto.*;
 import br.com.sicredi.toolschallenge.pagamento.service.PagamentoService;
 import br.com.sicredi.toolschallenge.shared.exception.GlobalExceptionHandler;
 import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
@@ -94,32 +93,45 @@ class PagamentoControllerTest {
     @DisplayName("1. POST /pagamentos com Idempotency-Key → 201 Created")
     void deveCriarPagamentoComSucesso() throws Exception {
         // Arrange
-        String idTransacao = UUID.randomUUID().toString();
+        String idTransacao = "1000235689001"; // 13 dígitos
         String idempotencyKey = UUID.randomUUID().toString();
 
-        PagamentoRequestDTO request = PagamentoRequestDTO.builder()
-            .estabelecimento("Loja X")
+        // Criar request com estrutura aninhada
+        DescricaoDTO descricao = DescricaoDTO.builder()
             .valor(new BigDecimal("150.00"))
-            .moeda("BRL")
-            .tipoPagamento(TipoPagamento.AVISTA)
+            .dataHora(OffsetDateTime.now())
+            .estabelecimento("Loja X")
+            .build();
+
+        FormaPagamentoDTO formaPagamento = FormaPagamentoDTO.builder()
+            .tipo(TipoPagamento.AVISTA)
             .parcelas(1)
-            .cartaoMascarado("4111********1111")
+            .build();
+
+        TransacaoDTO transacao = TransacaoDTO.builder()
+            .cartao("4111********1111")
+            .id(idTransacao)
+            .descricao(descricao)
+            .formaPagamento(formaPagamento)
+            .build();
+
+        PagamentoRequestDTO request = PagamentoRequestDTO.builder()
+            .transacao(transacao)
+            .build();
+
+        // Criar response esperado
+        TransacaoDTO transacaoResponse = TransacaoDTO.builder()
+            .cartao("4111********1111")
+            .id(idTransacao)
+            .descricao(descricao)
+            .formaPagamento(formaPagamento)
+            .nsu("123456789")
+            .codigoAutorizacao("AUTH987654")
+            .status(StatusPagamento.AUTORIZADO)
             .build();
 
         PagamentoResponseDTO responseEsperado = PagamentoResponseDTO.builder()
-            .idTransacao(idTransacao)
-            .estabelecimento("Loja X")
-            .valor(new BigDecimal("150.00"))
-            .moeda("BRL")
-            .tipoPagamento(TipoPagamento.AVISTA)
-            .parcelas(1)
-            .cartaoMascarado("4111********1111")
-            .status(StatusPagamento.AUTORIZADO)
-            .nsu("123456789")
-            .codigoAutorizacao("AUTH987654")
-            .dataHora(OffsetDateTime.now())
-            .criadoEm(OffsetDateTime.now())
-            .atualizadoEm(OffsetDateTime.now())
+            .transacao(transacaoResponse)
             .build();
 
         when(pagamentoService.criarPagamento(any(PagamentoRequestDTO.class)))
@@ -131,12 +143,12 @@ class PagamentoControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.idTransacao").value(idTransacao))
-            .andExpect(jsonPath("$.estabelecimento").value("Loja X"))
-            .andExpect(jsonPath("$.status").value("AUTORIZADO"))
-            .andExpect(jsonPath("$.valor").value(150.00))
-            .andExpect(jsonPath("$.nsu").value("123456789"))
-            .andExpect(jsonPath("$.codigoAutorizacao").value("AUTH987654"));
+            .andExpect(jsonPath("$.transacao.id").value(idTransacao))
+            .andExpect(jsonPath("$.transacao.descricao.estabelecimento").value("Loja X"))
+            .andExpect(jsonPath("$.transacao.status").value("AUTORIZADO"))
+            .andExpect(jsonPath("$.transacao.descricao.valor").value(150.00))
+            .andExpect(jsonPath("$.transacao.nsu").value("123456789"))
+            .andExpect(jsonPath("$.transacao.codigoAutorizacao").value("AUTH987654"));
 
         verify(pagamentoService, times(1)).criarPagamento(any(PagamentoRequestDTO.class));
     }
@@ -155,17 +167,29 @@ class PagamentoControllerTest {
     @DisplayName("2. GET /pagamentos/{id} encontrado → 200 OK")
     void deveBuscarPagamentoPorId() throws Exception {
         // Arrange
-        String idTransacao = UUID.randomUUID().toString();
+        String idTransacao = "1000235689002"; // 13 dígitos
 
-        PagamentoResponseDTO responseEsperado = PagamentoResponseDTO.builder()
-            .idTransacao(idTransacao)
-            .estabelecimento("Loja Y")
+        DescricaoDTO descricao = DescricaoDTO.builder()
             .valor(new BigDecimal("250.00"))
-            .tipoPagamento(TipoPagamento.PARCELADO_LOJA)
+            .estabelecimento("Loja Y")
+            .build();
+
+        FormaPagamentoDTO formaPagamento = FormaPagamentoDTO.builder()
+            .tipo(TipoPagamento.PARCELADO_LOJA)
             .parcelas(3)
+            .build();
+
+        TransacaoDTO transacao = TransacaoDTO.builder()
+            .id(idTransacao)
+            .descricao(descricao)
+            .formaPagamento(formaPagamento)
             .status(StatusPagamento.AUTORIZADO)
             .nsu("987654321")
             .codigoAutorizacao("AUTH123456")
+            .build();
+
+        PagamentoResponseDTO responseEsperado = PagamentoResponseDTO.builder()
+            .transacao(transacao)
             .build();
 
         when(pagamentoService.buscarPorIdTransacao(idTransacao))
@@ -174,11 +198,11 @@ class PagamentoControllerTest {
         // Act & Assert
         mockMvc.perform(get("/pagamentos/{idTransacao}", idTransacao))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.idTransacao").value(idTransacao))
-            .andExpect(jsonPath("$.estabelecimento").value("Loja Y"))
-            .andExpect(jsonPath("$.status").value("AUTORIZADO"))
-            .andExpect(jsonPath("$.valor").value(250.00))
-            .andExpect(jsonPath("$.nsu").value("987654321"));
+            .andExpect(jsonPath("$.transacao.id").value(idTransacao))
+            .andExpect(jsonPath("$.transacao.descricao.estabelecimento").value("Loja Y"))
+            .andExpect(jsonPath("$.transacao.status").value("AUTORIZADO"))
+            .andExpect(jsonPath("$.transacao.descricao.valor").value(250.00))
+            .andExpect(jsonPath("$.transacao.nsu").value("987654321"));
 
         verify(pagamentoService, times(1)).buscarPorIdTransacao(idTransacao);
     }
@@ -222,18 +246,30 @@ class PagamentoControllerTest {
     @DisplayName("4. GET /pagamentos → 200 OK (lista todos)")
     void deveListarTodosPagamentos() throws Exception {
         // Arrange
-        PagamentoResponseDTO pagamento1 = PagamentoResponseDTO.builder()
-            .idTransacao(UUID.randomUUID().toString())
-            .estabelecimento("Loja ABC")
+        TransacaoDTO transacao1 = TransacaoDTO.builder()
+            .id("1000235689003") // 13 dígitos
+            .descricao(DescricaoDTO.builder()
+                .estabelecimento("Loja ABC")
+                .valor(new BigDecimal("100.00"))
+                .build())
             .status(StatusPagamento.AUTORIZADO)
-            .valor(new BigDecimal("100.00"))
+            .build();
+
+        TransacaoDTO transacao2 = TransacaoDTO.builder()
+            .id("1000235689004") // 13 dígitos
+            .descricao(DescricaoDTO.builder()
+                .estabelecimento("Loja XYZ")
+                .valor(new BigDecimal("200.00"))
+                .build())
+            .status(StatusPagamento.NEGADO)
+            .build();
+
+        PagamentoResponseDTO pagamento1 = PagamentoResponseDTO.builder()
+            .transacao(transacao1)
             .build();
 
         PagamentoResponseDTO pagamento2 = PagamentoResponseDTO.builder()
-            .idTransacao(UUID.randomUUID().toString())
-            .estabelecimento("Loja XYZ")
-            .status(StatusPagamento.NEGADO)
-            .valor(new BigDecimal("200.00"))
+            .transacao(transacao2)
             .build();
 
         List<PagamentoResponseDTO> pagamentos = Arrays.asList(pagamento1, pagamento2);
@@ -245,12 +281,12 @@ class PagamentoControllerTest {
         mockMvc.perform(get("/pagamentos"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$", hasSize(2)))
-            .andExpect(jsonPath("$[0].estabelecimento").value("Loja ABC"))
-            .andExpect(jsonPath("$[0].status").value("AUTORIZADO"))
-            .andExpect(jsonPath("$[0].valor").value(100.00))
-            .andExpect(jsonPath("$[1].estabelecimento").value("Loja XYZ"))
-            .andExpect(jsonPath("$[1].status").value("NEGADO"))
-            .andExpect(jsonPath("$[1].valor").value(200.00));
+            .andExpect(jsonPath("$[0].transacao.descricao.estabelecimento").value("Loja ABC"))
+            .andExpect(jsonPath("$[0].transacao.status").value("AUTORIZADO"))
+            .andExpect(jsonPath("$[0].transacao.descricao.valor").value(100.00))
+            .andExpect(jsonPath("$[1].transacao.descricao.estabelecimento").value("Loja XYZ"))
+            .andExpect(jsonPath("$[1].transacao.status").value("NEGADO"))
+            .andExpect(jsonPath("$[1].transacao.descricao.valor").value(200.00));
 
         verify(pagamentoService, times(1)).listarPagamentos();
     }
@@ -274,12 +310,24 @@ class PagamentoControllerTest {
     @DisplayName("5. POST /pagamentos com validação inválida → 400 Bad Request")
     void deveRetornar400QuandoCamposInvalidos() throws Exception {
         // Arrange - Request com múltiplas validações inválidas
-        PagamentoRequestDTO requestInvalido = PagamentoRequestDTO.builder()
+        DescricaoDTO descricaoInvalida = DescricaoDTO.builder()
             .estabelecimento("")  // @NotBlank - vazio
             .valor(new BigDecimal("-10.00"))  // @DecimalMin - negativo
-            .tipoPagamento(null)  // @NotNull
+            .build();
+
+        FormaPagamentoDTO formaPagamentoInvalida = FormaPagamentoDTO.builder()
+            .tipo(null)  // @NotNull
             .parcelas(null)  // @NotNull
-            .cartaoMascarado("123")  // @Pattern - formato inválido
+            .build();
+
+        TransacaoDTO transacaoInvalida = TransacaoDTO.builder()
+            .cartao("123")  // @Pattern - formato inválido
+            .descricao(descricaoInvalida)
+            .formaPagamento(formaPagamentoInvalida)
+            .build();
+
+        PagamentoRequestDTO requestInvalido = PagamentoRequestDTO.builder()
+            .transacao(transacaoInvalida)
             .build();
 
         // Act & Assert
