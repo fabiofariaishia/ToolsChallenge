@@ -56,6 +56,46 @@ public class PagamentoController {
         summary = "Criar novo pagamento",
         description = "Cria uma nova transação de pagamento e retorna o resultado da autorização. Requer header 'Chave-Idempotencia' para evitar duplicação."
     )
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+        description = "Dados do pagamento a ser processado",
+        required = true,
+        content = @Content(
+            mediaType = "application/json",
+            schema = @Schema(implementation = PagamentoRequestDTO.class),
+            examples = {
+                @io.swagger.v3.oas.annotations.media.ExampleObject(
+                    name = "Pagamento à vista",
+                    summary = "Exemplo de pagamento à vista",
+                    description = "Pagamento único sem parcelamento",
+                    value = """
+                        {
+                          "valor": 150.50,
+                          "moeda": "BRL",
+                          "estabelecimento": "Supermercado Exemplo Ltda",
+                          "tipoPagamento": "AVISTA",
+                          "parcelas": 1,
+                          "cartaoMascarado": "4111********1111"
+                        }
+                        """
+                ),
+                @io.swagger.v3.oas.annotations.media.ExampleObject(
+                    name = "Pagamento parcelado",
+                    summary = "Exemplo de pagamento parcelado na loja",
+                    description = "Pagamento em 3 parcelas sem juros (loja)",
+                    value = """
+                        {
+                          "valor": 300.00,
+                          "moeda": "BRL",
+                          "estabelecimento": "Loja de Eletrônicos XYZ",
+                          "tipoPagamento": "PARCELADO_LOJA",
+                          "parcelas": 3,
+                          "cartaoMascarado": "5555********4444"
+                        }
+                        """
+                )
+            }
+        )
+    )
     @ApiResponses({
         @ApiResponse(
             responseCode = "201",
@@ -64,11 +104,23 @@ public class PagamentoController {
         ),
         @ApiResponse(
             responseCode = "400",
-            description = "Dados inválidos na requisição ou header 'Chave-Idempotencia' ausente"
+            description = "Requisição inválida: dados incorretos, header 'Chave-Idempotencia' ausente ou validação falhou",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Não autenticado: token JWT ausente ou inválido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Acesso negado: token válido mas sem permissão 'pagamentos:write'",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
         ),
         @ApiResponse(
             responseCode = "500",
-            description = "Erro interno do servidor"
+            description = "Erro interno do servidor",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
         )
     })
     public ResponseEntity<PagamentoResponseDTO> criarPagamento(
@@ -107,8 +159,19 @@ public class PagamentoController {
             content = @Content(schema = @Schema(implementation = PagamentoResponseDTO.class))
         ),
         @ApiResponse(
+            responseCode = "401",
+            description = "Não autenticado: token JWT ausente ou inválido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Acesso negado: token válido mas sem permissão 'pagamentos:read'",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
             responseCode = "404",
-            description = "Pagamento não encontrado"
+            description = "Pagamento não encontrado com o ID fornecido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
         )
     })
     public ResponseEntity<PagamentoResponseDTO> buscarPagamento(
@@ -133,10 +196,22 @@ public class PagamentoController {
         summary = "Listar todos os pagamentos",
         description = "Retorna os últimos 100 pagamentos ordenados por data de criação (mais recentes primeiro)"
     )
-    @ApiResponse(
-        responseCode = "200",
-        description = "Lista de pagamentos retornada com sucesso"
-    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = "200",
+            description = "Lista de pagamentos retornada com sucesso"
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Não autenticado: token JWT ausente ou inválido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Acesso negado: token válido mas sem permissão 'pagamentos:read'",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        )
+    })
     public ResponseEntity<List<PagamentoResponseDTO>> listarPagamentos() {
         log.info("GET /pagamentos - Listando todos os pagamentos");
         
@@ -159,10 +234,22 @@ public class PagamentoController {
         summary = "Listar pagamentos por status",
         description = "Retorna pagamentos filtrados por status específico"
     )
-    @ApiResponse(
-        responseCode = "200",
-        description = "Lista de pagamentos filtrada retornada com sucesso"
-    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = "200",
+            description = "Lista de pagamentos filtrada retornada com sucesso"
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Não autenticado: token JWT ausente ou inválido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Acesso negado: token válido mas sem permissão 'pagamentos:read'",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        )
+    })
     public ResponseEntity<List<PagamentoResponseDTO>> listarPorStatus(
         @Parameter(description = "Status do pagamento", example = "AUTORIZADO")
         @PathVariable StatusPagamento status

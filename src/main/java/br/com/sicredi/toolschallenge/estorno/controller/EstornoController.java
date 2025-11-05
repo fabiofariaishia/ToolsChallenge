@@ -55,6 +55,39 @@ public class EstornoController {
         summary = "Criar novo estorno",
         description = "Solicita o estorno de um pagamento autorizado. Apenas estorno total é permitido, dentro de 24 horas. Requer header 'Chave-Idempotencia'."
     )
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+        description = "Dados do estorno a ser processado",
+        required = true,
+        content = @Content(
+            mediaType = "application/json",
+            schema = @Schema(implementation = EstornoRequestDTO.class),
+            examples = {
+                @io.swagger.v3.oas.annotations.media.ExampleObject(
+                    name = "Estorno com motivo",
+                    summary = "Exemplo de estorno com motivo detalhado",
+                    description = "Estorno total de pagamento autorizado com justificativa",
+                    value = """
+                        {
+                          "idTransacao": "123e4567-e89b-12d3-a456-426614174000",
+                          "valor": 150.50,
+                          "motivo": "Cliente solicitou cancelamento da compra"
+                        }
+                        """
+                ),
+                @io.swagger.v3.oas.annotations.media.ExampleObject(
+                    name = "Estorno sem motivo",
+                    summary = "Exemplo de estorno sem motivo",
+                    description = "Estorno mínimo (motivo é opcional)",
+                    value = """
+                        {
+                          "idTransacao": "987fcdeb-51a2-43f6-b789-012345678901",
+                          "valor": 300.00
+                        }
+                        """
+                )
+            }
+        )
+    )
     @ApiResponses({
         @ApiResponse(
             responseCode = "201",
@@ -63,15 +96,28 @@ public class EstornoController {
         ),
         @ApiResponse(
             responseCode = "400",
-            description = "Dados inválidos (valor incorreto, pagamento não encontrado, header 'Chave-Idempotencia' ausente, etc.)"
+            description = "Requisição inválida: valor incorreto, pagamento não encontrado ou header 'Chave-Idempotencia' ausente",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Não autenticado: token JWT ausente ou inválido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Acesso negado: token válido mas sem permissão 'estornos:write'",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
         ),
         @ApiResponse(
             responseCode = "409",
-            description = "Conflito: Já existe estorno para este pagamento ou pagamento não está autorizado"
+            description = "Conflito: já existe estorno para este pagamento ou pagamento não está autorizado",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
         ),
         @ApiResponse(
             responseCode = "500",
-            description = "Erro interno do servidor"
+            description = "Erro interno do servidor",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
         )
     })
     public ResponseEntity<EstornoResponseDTO> criarEstorno(
@@ -110,8 +156,19 @@ public class EstornoController {
             content = @Content(schema = @Schema(implementation = EstornoResponseDTO.class))
         ),
         @ApiResponse(
+            responseCode = "401",
+            description = "Não autenticado: token JWT ausente ou inválido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Acesso negado: token válido mas sem permissão 'estornos:read'",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
             responseCode = "404",
-            description = "Estorno não encontrado"
+            description = "Estorno não encontrado com o ID fornecido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
         )
     })
     public ResponseEntity<EstornoResponseDTO> buscarEstorno(
@@ -137,10 +194,22 @@ public class EstornoController {
         summary = "Listar estornos de um pagamento",
         description = "Retorna todos os estornos (tentativas) relacionados a um pagamento específico"
     )
-    @ApiResponse(
-        responseCode = "200",
-        description = "Lista de estornos retornada com sucesso"
-    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = "200",
+            description = "Lista de estornos retornada com sucesso"
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Não autenticado: token JWT ausente ou inválido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Acesso negado: token válido mas sem permissão 'estornos:read'",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        )
+    })
     public ResponseEntity<List<EstornoResponseDTO>> listarEstornosPorPagamento(
         @Parameter(description = "ID da transação do pagamento", example = "123e4567-e89b-12d3-a456-426614174000")
         @PathVariable String idTransacao
@@ -165,10 +234,22 @@ public class EstornoController {
         summary = "Listar todos os estornos",
         description = "Retorna os últimos 100 estornos ordenados por data de criação (mais recentes primeiro)"
     )
-    @ApiResponse(
-        responseCode = "200",
-        description = "Lista de estornos retornada com sucesso"
-    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = "200",
+            description = "Lista de estornos retornada com sucesso"
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Não autenticado: token JWT ausente ou inválido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Acesso negado: token válido mas sem permissão 'estornos:read'",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        )
+    })
     public ResponseEntity<List<EstornoResponseDTO>> listarEstornos() {
         log.info("GET /estornos - Listando todos os estornos");
 
@@ -191,10 +272,22 @@ public class EstornoController {
         summary = "Listar estornos por status",
         description = "Retorna estornos filtrados por status específico"
     )
-    @ApiResponse(
-        responseCode = "200",
-        description = "Lista de estornos filtrada retornada com sucesso"
-    )
+    @ApiResponses({
+        @ApiResponse(
+            responseCode = "200",
+            description = "Lista de estornos filtrada retornada com sucesso"
+        ),
+        @ApiResponse(
+            responseCode = "401",
+            description = "Não autenticado: token JWT ausente ou inválido",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        ),
+        @ApiResponse(
+            responseCode = "403",
+            description = "Acesso negado: token válido mas sem permissão 'estornos:read'",
+            content = @Content(schema = @Schema(implementation = br.com.sicredi.toolschallenge.shared.exception.ErroResposta.class))
+        )
+    })
     public ResponseEntity<List<EstornoResponseDTO>> listarPorStatus(
         @Parameter(description = "Status do estorno", example = "CANCELADO")
         @PathVariable StatusEstorno status
