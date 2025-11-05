@@ -38,3 +38,7 @@ build/
 ### Docker ###
 docker/postgres/pgdata/
 docker/redis/data/
+
+### Documentation ###
+docs/
+.github/instructions/copilot-instructions.md

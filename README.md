@@ -1,80 +1,204 @@
-# 📘 ToolsChallenge - API de Pagamentos Sicredi#  ToolsChallenge - API de Pagamentos Sicredi
+# 📘 ToolsChallenge - API de Pagamentos Sicredi
+
+## 📋 Índice
+
+1. [Visão Geral](#-visão-geral)
+2. [Stack Tecnológico](#-stack-tecnológico)
+3. [Estrutura de Pastas](#-estrutura-de-pastas)
+4. [Banco de Dados](#-banco-de-dados)
+5. [Mensageria (Kafka)](#-mensageria-kafka)
+6. [Cache e Locks Distribuídos](#-cache-e-locks-distribuídos)
+7. [Resiliência (Resilience4j)](#-resiliência-resilience4j)
+8. [Observabilidade](#-observabilidade)
+9. [APIs e Endpoints](#-apis-e-endpoints)
+10. [Configuração e Ambiente](#-configuração-e-ambiente)
+11. [Testes](#-testes)
+12. [Deploy e CI/CD](#-deploy-e-cicd)
+
+---
+
+## 🎯 Visão Geral
+
+**ToolsChallenge** é uma API REST de processamento de pagamentos desenvolvida para o **Sicredi**, implementando padrões de arquitetura moderna, resiliente e escalável baseada em **Monolito Modular** com preparação para evolução para **Microserviços**.
 
 
 
-> **Documentação Técnica Completa** | *Para regras de desenvolvimento, consulte [copilot-instructions.md](.github/instructions/copilot-instructions.md)*> **Documentação Técnica Completa** | *Para regras de desenvolvimento, consulte [copilot-instructions.md](.github/instructions/copilot-instructions.md)*
+### Características Principais
 
+- 🔐 **Idempotência**: Chaves idempotentes em todos os endpoints mutáveis
+- 🔄 **Outbox Pattern**: Garantia de entrega de eventos via transactional outbox
+- 🔒 **Locks Distribuídos**: Prevenção de race conditions com Redisson
+- 🛡️ **Resiliência**: Circuit Breaker, Retry e Bulkhead com Resilience4j
+- 📊 **Auditoria**: Registro completo de todos os eventos de negócio
+- 🚀 **Performance**: Cache Redis e processamento assíncrono via Kafka
 
+---
 
-## 📋 Índice##  Índice
+## 🚀 Quick Start
 
+### Pré-requisitos
 
+- **Java 17+** instalado
+- **Docker Desktop** rodando (para Windows)
+- **Maven 3.9+** (ou use o wrapper incluído: `mvnw.cmd`)
+- **Git** para clonar o repositório
 
-1. [Visão Geral](#-visão-geral)1. [Visão Geral](#-visão-geral)
+### Passo 1: Clonar o Repositório
 
-2. [Stack Tecnológico](#%EF%B8%8F-stack-tecnológico)2. [Stack Tecnológico](#-stack-tecnológico)
+```powershell
+git clone https://github.com/seu-usuario/ToolsChallenge.git
+cd ToolsChallenge
+```
 
-3. [Estrutura de Pastas](#-estrutura-de-pastas)3. [Estrutura de Pastas](#-estrutura-de-pastas)
+### Passo 2: Subir Infraestrutura (Docker)
 
-4. [Banco de Dados](#%EF%B8%8F-banco-de-dados)4. [Banco de Dados](#-banco-de-dados)
+```powershell
+# Subir todos os containers (PostgreSQL, Redis, Kafka, Prometheus, Grafana, Jaeger)
+docker-compose up -d
 
-5. [Mensageria (Kafka)](#-mensageria-kafka)5. [Mensageria (Kafka)](#-mensageria-kafka)
+# Verificar status dos containers
+docker-compose ps
 
-6. [Cache e Locks Distribuídos](#-cache-e-locks-distribuídos)6. [Cache e Locks Distribuídos](#-cache-e-locks-distribuídos)
+# Verificar logs (opcional)
+docker-compose logs -f
+```
 
-7. [Resiliência (Resilience4j)](#%EF%B8%8F-resiliência-resilience4j)7. [Resiliência (Resilience4j)](#-resiliência-resilience4j)
+**Containers iniciados:**
+- **PostgreSQL** (porta 5432)
+- **Redis** (porta 6379)
+- **Kafka** (porta 9092)
+- **Kafka UI** (porta 8081)
+- **Prometheus** (porta 9090)
+- **Grafana** (porta 3000)
+- **Jaeger** (porta 16686)
+- **Exporters** (postgres:9187, redis:9121, kafka:9308)
 
-8. [Observabilidade](#-observabilidade)8. [Observabilidade](#-observabilidade)
+### Passo 3: Compilar a Aplicação
 
-9. [APIs e Endpoints](#-apis-e-endpoints)9. [APIs e Endpoints](#-apis-e-endpoints)
+```powershell
+# Usando Maven Wrapper (recomendado - não precisa ter Maven instalado)
+.\mvnw.cmd clean package
 
-10. [Configuração e Ambiente](#%EF%B8%8F-configuração-e-ambiente)10. [Configuração e Ambiente](#-configuração-e-ambiente)
+# OU usando Maven instalado
+mvn clean package
+```
 
-11. [Testes](#-testes)11. [Testes](#-testes)
+**Saída esperada:**
+```
+[INFO] Tests run: 125, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+```
 
-12. [Deploy e CI/CD](#-deploy-e-cicd)12. [Deploy e CI/CD](#-deploy-e-cicd)
+### Passo 4: Executar a Aplicação
 
-13. [Monitoramento](#-monitoramento)13. [Monitoramento](#-monitoramento)
+```powershell
+# Opção 1: Via Maven (com hot reload)
+.\mvnw.cmd spring-boot:run
 
-14. [Troubleshooting](#-troubleshooting)14. [Troubleshooting](#-troubleshooting)
+# Opção 2: Via JAR compilado
+java -jar target/toolschallenge-0.0.1-SNAPSHOT.jar
+```
 
-15. [FAQ](#-faq)15. [FAQ](#-faq)
+**Aguarde a mensagem:**
+```
+Started ToolschallengeApplication in X.XXX seconds
+```
 
-16. [Referências](#-referências)16. [Referências](#-referências)
+### Passo 5: Acessar os Serviços
 
+| Serviço | URL | Credenciais |
+|---------|-----|-------------|
+| **API Swagger** | http://localhost:8080/swagger-ui.html | - |
+| **Actuator** | http://localhost:8080/atuador/health | - |
+| **Prometheus** | http://localhost:9090 | - |
+| **Grafana** | http://localhost:3000 | `admin` / `admin123` |
+| **Jaeger** | http://localhost:16686 | - |
+| **Kafka UI** | http://localhost:8081 | - |
 
+### Passo 6: Testar a API
 
-------
+**Criar um Pagamento:**
 
+```powershell
+# PowerShell (Windows)
+$headers = @{
+    "Content-Type" = "application/json"
+    "Chave-Idempotencia" = [guid]::NewGuid().ToString()
+}
+$body = @{
+    descricao = "Compra de Teste"
+    valor = 150.50
+    tipoPagamento = "CARTAO_CREDITO"
+} | ConvertTo-Json
 
+Invoke-RestMethod -Uri "http://localhost:8080/pagamentos" -Method POST -Headers $headers -Body $body
+```
 
-## 🎯 Visão Geral##  Visão Geral
+**Resposta esperada (201 Created):**
+```json
+{
+  "id": 1,
+  "descricao": "Compra de Teste",
+  "valor": 150.50,
+  "tipoPagamento": "CARTAO_CREDITO",
+  "status": "AUTORIZADO",
+  "nsu": "123456789",
+  "codigoAutorizacao": "AUTH987654",
+  "dataCriacao": "2025-11-04T10:30:00Z"
+}
+```
 
+### Passo 7: Visualizar Métricas no Grafana
 
+1. Acessar http://localhost:3000 (`admin` / `admin123`)
+2. Navegar para **Dashboards**
+3. Abrir dashboards disponíveis:
+   - **Business Metrics** - métricas de negócio
+   - **HTTP Metrics** - métricas de API
+   - **JVM Micrometer** - métricas de JVM
+   - **Resilience4j** - circuit breaker, retry, bulkhead
 
-**ToolsChallenge** é uma API REST de processamento de pagamentos desenvolvida para o **Sicredi**, implementando padrões de arquitetura moderna, resiliente e escalável baseada em **Monolito Modular** com preparação para evolução para **Microserviços**.**ToolsChallenge** é uma API REST de processamento de pagamentos desenvolvida para o **Sicredi**, implementando padrões de arquitetura moderna, resiliente e escalável baseada em **Monolito Modular** com preparação para evolução para **Microserviços**.
+### Troubleshooting Rápido
 
+**Container não inicia:**
+```powershell
+# Ver logs detalhados
+docker-compose logs nome-do-container
 
+# Reiniciar container específico
+docker-compose restart nome-do-container
+```
 
-### Características Principais### Características Principais
+**Aplicação não conecta no banco:**
+```powershell
+# Verificar se PostgreSQL está rodando
+docker-compose ps postgres
 
+# Testar conexão
+docker exec -it toolschallenge-postgres psql -U postgres -d pagamentos -c "\dt"
+```
 
+**Porta já em uso:**
+```powershell
+# Descobrir processo usando a porta (ex: 8080)
+netstat -ano | findstr :8080
 
-- 🔐 **Idempotência**: Chaves idempotentes em todos os endpoints mutáveis-  **Idempotência**: Chaves idempotentes em todos os endpoints mutáveis
+# Matar processo (substitua PID)
+taskkill /PID <PID> /F
+```
 
-- 🔄 **Outbox Pattern**: Garantia de entrega de eventos via transactional outbox-  **Outbox Pattern**: Garantia de entrega de eventos via transactional outbox
+**Limpar tudo e recomeçar:**
+```powershell
+# Parar e remover containers + volumes
+docker-compose down -v
 
-- 🔒 **Locks Distribuídos**: Prevenção de race conditions com Redisson-  **Locks Distribuídos**: Prevenção de race conditions com Redisson
+# Subir novamente
+docker-compose up -d
 
-- 🛡️ **Resiliência**: Circuit Breaker, Retry e Bulkhead com Resilience4j-  **Resiliência**: Circuit Breaker, Retry e Bulkhead com Resilience4j
-
-- 📊 **Auditoria**: Registro completo de todos os eventos de negócio-  **Auditoria**: Registro completo de todos os eventos de negócio
-
-- 🚀 **Performance**: Cache Redis e processamento assíncrono via Kafka-  **Performance**: Cache Redis e processamento assíncrono via Kafka
-
-
-
-> **Regras de Desenvolvimento**: Para instruções completas sobre como desenvolver seguindo os padrões do projeto, consulte [.github/instructions/copilot-instructions.md](.github/instructions/copilot-instructions.md)> **Regras de Desenvolvimento**: Para instruções completas sobre como desenvolver seguindo os padrões do projeto, consulte [.github/instructions/copilot-instructions.md](.github/instructions/copilot-instructions.md)
+# Recompilar e executar
+.\mvnw.cmd clean package
+.\mvnw.cmd spring-boot:run
+```
 
 
 
@@ -88,199 +212,482 @@
 |-----------|--------|-----------|
 | **Java** | 17 | Linguagem base |
 | **Spring Boot** | 3.5.7 | Framework principal |
-| **Spring Data JPA** | 3.5.7 | Persistência ORM |
-| **Spring Kafka** | 3.5.7 | Mensageria |
-| **Spring Actuator** | 3.5.7 | Monitoramento |
+| **Spring Data JPA** | (parent) | Persistência ORM |
+| **Spring Kafka** | (parent) | Mensageria |
+| **Spring Actuator** | (parent) | Monitoramento |
+| **Spring Security** | (parent) | Autenticação e autorização |
+| **Spring Validation** | (parent) | Validação de beans |
+
+### Segurança
+
+| Tecnologia | Versão | Propósito |
+|-----------|--------|-----------|
+| **JJWT** | 0.12.6 | Geração e validação de tokens JWT |
+| **Spring Security** | 3.5.7 | Framework de segurança |
 
 ### Persistência
 
 | Tecnologia | Versão | Propósito |
 |-----------|--------|-----------|
-| **PostgreSQL** | 16 | Banco de dados principal |
-| **Flyway** | 10.x | Migrações de schema |
-| **Redis** | 7.x | Cache e locks distribuídos |
+| **PostgreSQL** | 15 (driver: runtime) | Banco de dados principal |
+| **Flyway** | (parent) | Migrações de schema |
+| **Flyway PostgreSQL** | (runtime) | Suporte PostgreSQL para Flyway |
+| **Redis** | 7 (via Lettuce) | Cache e idempotência |
+| **H2 Database** | (test) | Banco em memória para testes |
 
 ### Mensageria
 
 | Tecnologia | Versão | Propósito |
 |-----------|--------|-----------|
-| **Apache Kafka** | 3.6.x | Event streaming |
-| **Spring Kafka** | 3.5.7 | Integração com Kafka |
+| **Apache Kafka** | 7.5.0 (Confluent) | Event streaming (via Docker) |
+| **Spring Kafka** | (parent) | Integração com Kafka |
 
 ### Resiliência
 
 | Tecnologia | Versão | Propósito |
 |-----------|--------|-----------|
 | **Resilience4j** | 2.2.0 | Circuit Breaker, Retry, Bulkhead |
-| **Redisson** | 3.35.0 | Locks distribuídos |
+| **Redisson** | 3.35.0 | Locks distribuídos com Redis |
 
 ### Observabilidade
 
 | Tecnologia | Versão | Propósito |
 |-----------|--------|-----------|
-| **Micrometer** | 1.13.x | Métricas |
-| **Prometheus** | 2.x | Coleta de métricas |
-| **Springdoc OpenAPI** | 2.6.0 | Documentação Swagger |
+| **Micrometer** | (parent) | Métricas |
+| **Micrometer Prometheus** | (runtime) | Exportação para Prometheus |
+| **Micrometer Tracing** | (parent) | Distributed tracing |
+| **OpenTelemetry** | (parent) | Exportação OTLP para Jaeger |
+| **Prometheus** | 2.x (via Docker) | Coleta de métricas |
+| **Grafana** | latest (via Docker) | Visualização de métricas |
+| **Jaeger** | latest (via Docker) | Distributed tracing UI |
+| **Springdoc OpenAPI** | 2.7.0 | Documentação Swagger/OpenAPI |
 
 ### Build e Testes
 
 | Tecnologia | Versão | Propósito |
 |-----------|--------|-----------|
 | **Maven** | 3.9.x | Build tool |
-| **JUnit 5** | 5.10.x | Testes unitários |
-| **Testcontainers** | 1.19.x | Testes de integração |
+| **JUnit 5** | (parent) | Testes unitários |
+| **Spring Boot Test** | (test) | Testes de integração |
+| **Spring Security Test** | (test) | Testes de segurança |
+| **Spring Kafka Test** | (test) | Testes com Kafka |
+| **Testcontainers** | (test) | Containers Docker para testes |
+| **Testcontainers PostgreSQL** | (test) | PostgreSQL em container |
+| **Testcontainers Kafka** | (test) | Kafka em container |
+| **Testcontainers JUnit** | (test) | Integração JUnit 5 |
 | **Lombok** | 1.18.x | Redução de boilerplate |
+
+### Cloud & Infrastructure
+
+| Tecnologia | Versão | Propósito |
+|-----------|--------|-----------|
+| **Spring Cloud** | 2023.0.3 | Gestão de dependências cloud |
+| **Docker Compose** | 3.8 | Orquestração de containers locais |
 
 ---
 
 ## 📁 Estrutura de Pastas
 
-```
+```text
 ToolsChallenge/
-│
-├── .github/
-│   └── instructions/
-│       └── copilot-instructions.md    # Regras de desenvolvimento
 │
 ├── docker/
 │   ├── postgres/init.sql              # Scripts iniciais PostgreSQL
 │   ├── kafka/                         # Configurações Kafka
-│   └── redis/                         # Configurações Redis
+│   ├── redis/                         # Configurações Redis
+│   ├── grafana/provisioning/          # Dashboards e datasources Grafana
+│   └── prometheus/prometheus.yml      # Configuração Prometheus
 │
 ├── docs/
 │   ├── AUDITORIA.md                   # Sistema de auditoria
 │   ├── LOCK_DISTRIBUIDO.md            # Locks distribuídos
 │   ├── TESTES_IDEMPOTENCIA.md         # Testes idempotência
-│   └── TESTES_OUTBOX_PATTERN.md       # Testes Outbox Pattern
+│   ├── TESTES_OUTBOX_PATTERN.md       # Testes Outbox Pattern
+│   ├── EXEMPLOS_API_PAGAMENTO.md      # Exemplos de uso da API de pagamentos
+│   ├── EXEMPLOS_API_ESTORNO.md        # Exemplos de uso da API de estornos
+│   └── QUICKSTART.md                  # Guia rápido de início
 │
 ├── src/
 │   ├── main/
 │   │   ├── java/br/com/sicredi/toolschallenge/
-│   │   │   ├── adquirente/            # Módulo Adquirente
-│   │   │   ├── pagamento/             # Módulo Pagamento
-│   │   │   ├── estorno/               # Módulo Estorno
-│   │   │   ├── infra/                 # Infraestrutura
-│   │   │   └── shared/                # Compartilhado
+│   │   │   ├── adquirente/            # 🏦 Módulo Adquirente
+│   │   │   │   ├── domain/           # Entidades e enums
+│   │   │   │   ├── dto/              # DTOs de request/response
+│   │   │   │   ├── events/           # Eventos de domínio
+│   │   │   │   └── service/          # Lógica de negócio
+│   │   │   │
+│   │   │   ├── pagamento/             # 💳 Módulo Pagamento
+│   │   │   │   ├── controller/       # Endpoints REST
+│   │   │   │   ├── domain/           # Entidades e enums
+│   │   │   │   ├── dto/              # DTOs de request/response
+│   │   │   │   ├── events/           # Eventos de domínio
+│   │   │   │   ├── repository/       # Persistência JPA
+│   │   │   │   └── service/          # Lógica de negócio
+│   │   │   │
+│   │   │   ├── estorno/               # 🔄 Módulo Estorno
+│   │   │   │   ├── controller/       # Endpoints REST
+│   │   │   │   ├── domain/           # Entidades e enums
+│   │   │   │   ├── dto/              # DTOs de request/response
+│   │   │   │   ├── events/           # Eventos de domínio
+│   │   │   │   ├── repository/       # Persistência JPA
+│   │   │   │   └── service/          # Lógica de negócio
+│   │   │   │
+│   │   │   ├── admin/                 # 🔑 Módulo Admin (geração de tokens JWT)
+│   │   │   │   ├── controller/       # Endpoints administrativos
+│   │   │   │   └── dto/              # DTOs de response
+│   │   │   │
+│   │   │   ├── infra/                 # 🏗️ Infraestrutura (cross-cutting)
+│   │   │   │   ├── auditoria/        # Sistema de auditoria de eventos
+│   │   │   │   ├── idempotencia/     # Mecanismo de idempotência
+│   │   │   │   ├── outbox/           # Outbox Pattern (Kafka)
+│   │   │   │   ├── scheduled/        # Jobs agendados (reprocessamento)
+│   │   │   │   └── tracing/          # Correlation ID e tracing
+│   │   │   │
+│   │   │   ├── shared/                # 🔧 Compartilhado (utilitários genéricos)
+│   │   │   │   ├── config/           # Configurações globais (Kafka, Redis, Redisson)
+│   │   │   │   ├── exception/        # Exceções globais e @ControllerAdvice
+│   │   │   │   └── security/         # JWT Service, Filters, SecurityConfig
+│   │   │   │
+│   │   │   └── ToolschallengeApplication.java  # Main class
+│   │   │
 │   │   └── resources/
-│   │       ├── application.yml
-│   │       └── db/migration/          # Flyway migrations
+│   │       ├── application.yml        # Configuração principal
+│   │       ├── application-test.yml   # Configuração de testes
+│   │       ├── logback-spring.xml     # Configuração de logs
+│   │       └── db/migration/          # Flyway migrations (V1__, V2__, ...)
+│   │
 │   └── test/
-│       └── java/.../toolschallenge/
-│           ├── integration/
-│           └── unit/
+│       └── java/br/com/sicredi/toolschallenge/
+│           ├── adquirente/service/   # Testes unitários Adquirente
+│           ├── pagamento/
+│           │   ├── controller/       # Testes unitários Controller
+│           │   └── service/          # Testes unitários Service
+│           ├── estorno/
+│           │   ├── controller/       # Testes unitários Controller
+│           │   └── service/          # Testes unitários Service
+│           ├── infra/
+│           │   ├── auditoria/        # Testes de auditoria
+│           │   ├── idempotencia/     # Testes de idempotência
+│           │   ├── outbox/           # Testes do Outbox Pattern
+│           │   ├── scheduled/        # Testes de reprocessamento
+│           │   └── tracing/          # Testes de Correlation ID
+│           └── shared/security/      # Testes de JWT
 │
-├── docker-compose.yml
-├── pom.xml
-├── README.md                          # Este arquivo
-├── EXEMPLOS_API_PAGAMENTO.md
-├── EXEMPLOS_API_ESTORNO.md
-└── QUICKSTART.md
+├── docker-compose.yml                 # Infraestrutura (PostgreSQL, Redis, Kafka, etc)
+├── pom.xml                            # Dependências Maven
+├── mvnw.cmd / mvnw                    # Maven Wrapper
+├── docker.ps1                         # Script Docker (PowerShell)
+├── Makefile                           # Comandos úteis
+└── README.md                          # Este arquivo
 ```
 
 ---
 
 ## 🗄️ Banco de Dados
 
-### Schema PostgreSQL
+### Schemas PostgreSQL
 
-#### Tabela: `pagamento`
+O projeto utiliza **3 schemas separados** seguindo o padrão **DDD (Domain-Driven Design)**:
 
+| Schema | Descrição | Tabelas |
+|--------|-----------|---------|
+| `pagamento` | Bounded Context de Pagamento | `pagamento` |
+| `estorno` | Bounded Context de Estorno | `estorno` |
+| `infra` | Infraestrutura compartilhada | `outbox`, `idempotencia`, `evento_auditoria` |
+
+**Extensões habilitadas**:
+- `uuid-ossp` - Geração de UUIDs
+- `pg_trgm` - Busca textual (trigram)
+
+**Timezone**: `America/Sao_Paulo` (UTC-3)
+
+---
+
+### Tabelas
+
+#### 1. `pagamento.pagamento`
+
+**Descrição**: Transações de pagamento com cartão de crédito.
+
+**DDL**:
 ```sql
-CREATE TABLE pagamento (
+CREATE TABLE pagamento.pagamento (
+    -- Chaves
     id BIGSERIAL PRIMARY KEY,
-    descricao VARCHAR(255) NOT NULL,
-    valor DECIMAL(19,2) NOT NULL,
-    tipo_pagamento VARCHAR(20) NOT NULL,
-    status VARCHAR(20) NOT NULL,
-    nsu VARCHAR(50),
-    codigo_autorizacao VARCHAR(50),
-    data_criacao TIMESTAMP NOT NULL,
-    data_atualizacao TIMESTAMP
+    id_transacao VARCHAR(50) NOT NULL UNIQUE,  -- Chave de negócio
+    
+    -- Status e Financeiro
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDENTE' 
+        CHECK (status IN ('PENDENTE', 'AUTORIZADO', 'NEGADO')),
+    valor DECIMAL(15,2) NOT NULL CHECK (valor > 0),
+    moeda VARCHAR(3) NOT NULL DEFAULT 'BRL',
+    
+    -- Data/hora
+    data_hora TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    -- Estabelecimento
+    estabelecimento VARCHAR(255) NOT NULL,
+    
+    -- Tipo de Pagamento
+    tipo_pagamento VARCHAR(20) NOT NULL 
+        CHECK (tipo_pagamento IN ('AVISTA', 'PARCELADO_LOJA', 'PARCELADO_EMISSOR')),
+    parcelas INTEGER NOT NULL CHECK (parcelas >= 1 AND parcelas <= 12),
+    
+    -- Dados do Adquirente
+    nsu VARCHAR(10) UNIQUE,                    -- NSU gerado via Snowflake
+    codigo_autorizacao VARCHAR(9) UNIQUE,      -- Código com Luhn check
+    
+    -- Cartão (SEMPRE mascarado)
+    cartao_mascarado VARCHAR(20) NOT NULL,     -- Formato: 4444********1234
+    
+    -- Snowflake ID (geração de NSU time-sortable)
+    snowflake_id BIGINT UNIQUE,
+    
+    -- Reprocessamento (DLQ)
+    tentativas_reprocessamento INTEGER NOT NULL DEFAULT 0,
+    
+    -- Auditoria
+    criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX idx_pagamento_status ON pagamento(status);
-CREATE INDEX idx_pagamento_nsu ON pagamento(nsu);
 ```
 
-#### Tabela: `estorno`
-
+**Índices**:
 ```sql
-CREATE TABLE estorno (
-    id BIGSERIAL PRIMARY KEY,
-    pagamento_id BIGINT NOT NULL,
-    valor DECIMAL(19,2) NOT NULL,
-    motivo VARCHAR(255),
-    status VARCHAR(20) NOT NULL,
-    data_criacao TIMESTAMP NOT NULL,
-    data_atualizacao TIMESTAMP,
-    FOREIGN KEY (pagamento_id) REFERENCES pagamento(id)
-);
-
-CREATE INDEX idx_estorno_pagamento_id ON estorno(pagamento_id);
-CREATE INDEX idx_estorno_status ON estorno(status);
+CREATE INDEX idx_pagamento_id_transacao ON pagamento.pagamento(id_transacao);
+CREATE INDEX idx_pagamento_status ON pagamento.pagamento(status);
+CREATE INDEX idx_pagamento_data_hora ON pagamento.pagamento(data_hora DESC);
+CREATE INDEX idx_pagamento_estabelecimento ON pagamento.pagamento(estabelecimento);
+CREATE INDEX idx_pagamento_nsu ON pagamento.pagamento(nsu) WHERE nsu IS NOT NULL;
+CREATE INDEX idx_pagamento_filtros ON pagamento.pagamento(status, estabelecimento, data_hora DESC);
+CREATE INDEX idx_pagamento_reprocessamento ON pagamento.pagamento(status, tentativas_reprocessamento, criado_em) 
+    WHERE status = 'PENDENTE';
 ```
 
-#### Tabela: `idempotencia`
+**Constraints**:
+- `chk_valor_positivo`: Valor > 0
+- `chk_parcelas_validas`: À vista = 1 parcela, Parcelado >= 2 parcelas
+- `chk_moeda_iso4217`: Moeda no formato ISO 4217 (ex: BRL)
+- `chk_cartao_mascarado`: Formato `^\d{4}\*+\d{4}$`
 
+**Trigger**: `trg_pagamento_atualizar_timestamp` - Atualiza `atualizado_em` automaticamente.
+
+---
+
+#### 2. `estorno.estorno`
+
+**Descrição**: Estornos de pagamentos autorizados (janela 24h, valor total).
+
+**DDL**:
 ```sql
-CREATE TABLE idempotencia (
+CREATE TABLE estorno.estorno (
+    -- Chaves
     id BIGSERIAL PRIMARY KEY,
-    chave VARCHAR(255) NOT NULL UNIQUE,
-    resposta TEXT,
-    status_code INTEGER,
-    timestamp TIMESTAMP NOT NULL,
-    expira_em TIMESTAMP NOT NULL
+    id_transacao VARCHAR(50) NOT NULL,         -- Referência ao pagamento
+    id_estorno VARCHAR(50) NOT NULL UNIQUE,    -- Chave única do estorno
+    
+    -- Status e Financeiro
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDENTE' 
+        CHECK (status IN ('PENDENTE', 'CANCELADO', 'NEGADO')),
+    valor DECIMAL(15,2) NOT NULL CHECK (valor > 0),
+    
+    -- Data/hora
+    data_hora TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    -- Dados do Adquirente
+    nsu VARCHAR(10) UNIQUE,
+    codigo_autorizacao VARCHAR(9) UNIQUE,
+    
+    -- Motivo (opcional)
+    motivo TEXT,
+    
+    -- Snowflake ID
+    snowflake_id BIGINT UNIQUE,
+    
+    -- Reprocessamento (DLQ)
+    tentativas_reprocessamento INTEGER NOT NULL DEFAULT 0,
+    
+    -- Auditoria
+    criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    atualizado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Foreign Key
+    CONSTRAINT fk_estorno_pagamento 
+        FOREIGN KEY (id_transacao) 
+        REFERENCES pagamento.pagamento(id_transacao)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
 );
-
-CREATE INDEX idx_idempotencia_expira_em ON idempotencia(expira_em);
 ```
 
-#### Tabela: `outbox_evento`
-
+**Índices**:
 ```sql
-CREATE TABLE outbox_evento (
-    id BIGSERIAL PRIMARY KEY,
-    agregado_tipo VARCHAR(50) NOT NULL,
-    agregado_id BIGINT NOT NULL,
-    tipo_evento VARCHAR(100) NOT NULL,
-    payload TEXT NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDENTE',
-    data_criacao TIMESTAMP NOT NULL,
-    data_publicacao TIMESTAMP
-);
+CREATE INDEX idx_estorno_id_transacao ON estorno.estorno(id_transacao);
+CREATE INDEX idx_estorno_id_estorno ON estorno.estorno(id_estorno);
+CREATE INDEX idx_estorno_status ON estorno.estorno(status);
+CREATE INDEX idx_estorno_data_hora ON estorno.estorno(data_hora DESC);
+CREATE INDEX idx_estorno_por_pagamento ON estorno.estorno(id_transacao, status);
+CREATE INDEX idx_estorno_reprocessamento ON estorno.estorno(status, tentativas_reprocessamento, criado_em) 
+    WHERE status = 'PENDENTE';
 
-CREATE INDEX idx_outbox_status ON outbox_evento(status);
-CREATE INDEX idx_outbox_data_criacao ON outbox_evento(data_criacao);
+-- Constraint única: apenas 1 estorno CANCELADO por pagamento
+CREATE UNIQUE INDEX idx_estorno_unico_cancelado 
+    ON estorno.estorno(id_transacao) 
+    WHERE status = 'CANCELADO';
 ```
 
-#### Tabela: `evento_auditoria`
+**Constraints**:
+- `chk_estorno_valor_positivo`: Valor > 0
+- `fk_estorno_pagamento`: Referência obrigatória ao pagamento original
 
+**Trigger**: `trg_estorno_atualizar_timestamp` - Atualiza `atualizado_em` automaticamente.
+
+---
+
+#### 3. `infra.outbox`
+
+**Descrição**: Transactional Outbox Pattern - Eventos pendentes para publicação no Kafka.
+
+**DDL**:
 ```sql
-CREATE TABLE evento_auditoria (
+CREATE TABLE infra.outbox (
     id BIGSERIAL PRIMARY KEY,
-    tipo_evento VARCHAR(100) NOT NULL,
-    agregado_tipo VARCHAR(50) NOT NULL,
-    agregado_id BIGINT NOT NULL,
-    payload TEXT NOT NULL,
-    data_evento TIMESTAMP NOT NULL
+    
+    -- Agregado
+    agregado_id VARCHAR(50) NOT NULL,
+    agregado_tipo VARCHAR(50) NOT NULL,        -- Ex: Pagamento, Estorno
+    
+    -- Evento
+    evento_tipo VARCHAR(100) NOT NULL,         -- Ex: PagamentoAutorizado
+    payload JSONB NOT NULL,
+    topico_kafka VARCHAR(100) NOT NULL,
+    
+    -- Status
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDENTE' 
+        CHECK (status IN ('PENDENTE', 'PROCESSADO', 'ERRO')),
+    tentativas INTEGER NOT NULL DEFAULT 0,
+    ultimo_erro TEXT,
+    
+    -- Timestamps
+    criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    processado_em TIMESTAMP WITH TIME ZONE
 );
-
-CREATE INDEX idx_auditoria_agregado ON evento_auditoria(agregado_tipo, agregado_id);
-CREATE INDEX idx_auditoria_tipo_evento ON evento_auditoria(tipo_evento);
-CREATE INDEX idx_auditoria_data_evento ON evento_auditoria(data_evento);
 ```
+
+**Índices**:
+```sql
+CREATE INDEX idx_outbox_status_pendente ON infra.outbox(status, criado_em) 
+    WHERE status = 'PENDENTE';
+CREATE INDEX idx_outbox_agregado ON infra.outbox(agregado_tipo, agregado_id);
+```
+
+**Função de Limpeza**:
+```sql
+-- Remove eventos processados há mais de 7 dias
+CREATE FUNCTION infra.limpar_outbox_processados() RETURNS INTEGER;
+```
+
+---
+
+#### 4. `infra.idempotencia`
+
+**Descrição**: Fallback de idempotência (quando Redis indisponível). TTL 24h.
+
+**DDL**:
+```sql
+CREATE TABLE infra.idempotencia (
+    chave VARCHAR(100) PRIMARY KEY,            -- Header: Chave-Idempotencia
+    
+    -- Transação
+    id_transacao VARCHAR(50) NOT NULL,
+    endpoint VARCHAR(100) NOT NULL,            -- Ex: POST /pagamentos
+    
+    -- Response
+    status_http INTEGER NOT NULL,
+    response_body JSONB,
+    
+    -- TTL
+    criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expira_em TIMESTAMP WITH TIME ZONE NOT NULL,
+    
+    CONSTRAINT chk_idempotencia_expiracao CHECK (expira_em > criado_em)
+);
+```
+
+**Índices**:
+```sql
+CREATE INDEX idx_idempotencia_expiracao ON infra.idempotencia(expira_em);
+CREATE INDEX idx_idempotencia_id_transacao ON infra.idempotencia(id_transacao);
+```
+
+**Função de Limpeza**:
+```sql
+-- Remove registros expirados (executar periodicamente)
+CREATE FUNCTION infra.limpar_idempotencia_expirada() RETURNS INTEGER;
+```
+
+---
+
+#### 5. `infra.evento_auditoria`
+
+**Descrição**: Log de auditoria de todos os eventos do sistema (compliance).
+
+**DDL**:
+```sql
+CREATE TABLE infra.evento_auditoria (
+    id BIGSERIAL PRIMARY KEY,
+    
+    -- Evento
+    evento_tipo VARCHAR(100) NOT NULL,
+    
+    -- Agregado (opcional)
+    agregado_tipo VARCHAR(50),
+    agregado_id VARCHAR(50),
+    
+    -- Usuário/Sistema
+    usuario VARCHAR(100),
+    
+    -- Dados
+    dados JSONB,
+    metadados JSONB,                           -- Ex: IP, User-Agent
+    
+    -- Timestamp
+    criado_em TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Índices**:
+```sql
+CREATE INDEX idx_evento_auditoria_tipo ON infra.evento_auditoria(evento_tipo);
+CREATE INDEX idx_evento_auditoria_agregado ON infra.evento_auditoria(agregado_tipo, agregado_id);
+CREATE INDEX idx_evento_auditoria_criado_em ON infra.evento_auditoria(criado_em DESC);
+CREATE INDEX idx_evento_auditoria_usuario ON infra.evento_auditoria(usuario);
+```
+
+---
 
 ### Flyway Migrations
 
 Migrações localizadas em `src/main/resources/db/migration/`:
 
-1. **V1**: Criar tabela `pagamento`
-2. **V2**: Criar tabela `estorno`
-3. **V3**: Criar tabela `idempotencia`
-4. **V4**: Criar tabela `outbox_evento`
-5. **V5**: Criar tabela `evento_auditoria`
+| Migration | Descrição | Artefatos Criados |
+|-----------|-----------|-------------------|
+| **V1** | Schemas e extensões | Schemas: `pagamento`, `estorno`, `infra`<br>Extensions: `uuid-ossp`, `pg_trgm` |
+| **V2** | Tabela de pagamentos | `pagamento.pagamento` + 6 índices + trigger |
+| **V3** | Tabela de estornos | `estorno.estorno` + 6 índices + trigger + constraint única |
+| **V4** | Tabelas de infraestrutura | `infra.outbox`, `infra.idempotencia`, `infra.evento_auditoria` + funções de limpeza |
+| **V5** | Dados de exemplo | INSERT de pagamentos e estornos para testes |
+| **V6** | Campo reprocessamento | Coluna `tentativas_reprocessamento` + índices para DLQ |
 
 **Execução**: Automática no startup via `spring.flyway.enabled=true`
+
+**Validação**:
+```sql
+-- Verificar versão das migrations
+SELECT version, description, installed_on 
+FROM flyway_schema_history 
+ORDER BY installed_rank;
+```
 
 ---
 
@@ -288,57 +695,98 @@ Migrações localizadas em `src/main/resources/db/migration/`:
 
 ### Tópicos Kafka
 
-| Tópico | Eventos | Consumidores |
-|--------|---------|--------------|
-| `pagamentos` | `PagamentoCriadoEvento`, `PagamentoStatusAlteradoEvento` | `PagamentoEventListener` (Auditoria) |
-| `estornos` | `EstornoCriadoEvento`, `EstornoStatusAlteradoEvento` | `EstornoEventListener` (Auditoria) |
+| Tópico | Eventos | Publicador | Consumidores |
+|--------|---------|------------|--------------|
+| `pagamentos` | `PagamentoCriadoEvento`, `PagamentoStatusAlteradoEvento` | `OutboxPublisher` via Outbox Pattern | Auditoria (futuros consumidores) |
+| `estornos` | `EstornoCriadoEvento`, `EstornoStatusAlteradoEvento` | `OutboxPublisher` via Outbox Pattern | Auditoria (futuros consumidores) |
+| `adquirente` | `AutorizacaoRealizadaEvento` | `OutboxPublisher` via Outbox Pattern | Auditoria (futuros consumidores) |
+
+**Nota**: O projeto usa **Outbox Pattern** - eventos são salvos na tabela `infra.outbox` de forma transacional, e um scheduler (`OutboxPublisher`) processa e publica no Kafka a cada 500ms.
 
 ### Estrutura de Evento
 
+**PagamentoCriadoEvento**:
+
 ```json
 {
-  "tipoEvento": "PAGAMENTO_CRIADO",
-  "timestamp": "2025-11-02T10:30:00Z",
-  "agregadoId": 123,
-  "dados": {
-    "id": 123,
-    "descricao": "Compra na Loja X",
-    "valor": 150.50,
-    "status": "PROCESSADO",
-    "nsu": "123456789",
-    "codigoAutorizacao": "AUTH987654"
-  }
+  "idPagamento": 123,
+  "idTransacao": "PAG-20251104-550e8400",
+  "descricao": "Compra na Loja X",
+  "valor": 150.50,
+  "metodoPagamento": "CARTAO_CREDITO",
+  "formaPagamento": "AVISTA",
+  "status": "AUTORIZADO",
+  "criadoEm": "2025-11-04T10:30:00-03:00"
+}
+```
+
+**EstornoCriadoEvento**:
+
+```json
+{
+  "idEstorno": 456,
+  "idTransacao": "PAG-20251104-550e8400",
+  "idEstornoUnico": "EST-20251104-660f9511",
+  "valor": 150.50,
+  "motivo": "Cliente solicitou cancelamento",
+  "status": "CANCELADO",
+  "criadoEm": "2025-11-04T11:00:00-03:00"
 }
 ```
 
 ### Configuração Kafka
 
-**Producer**:
+**Producer** (KafkaConfig.java):
 
 ```yaml
 spring:
   kafka:
+    bootstrap-servers: localhost:9092
     producer:
-      key-serializer: StringSerializer
-      value-serializer: JsonSerializer
-      acks: all                    # Garantia de escrita
-      retries: 3                   # Retry automático
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      # Configurações de confiabilidade (KafkaConfig)
+      acks: all                              # Aguarda confirmação de todos os replicas
+      retries: 3                             # Retry automático em caso de erro
+      enable.idempotence: true               # Previne duplicatas no Kafka
+      max.in.flight.requests.per.connection: 1  # Garante ordem das mensagens
+      # Performance
+      batch.size: 16384                      # Batch de 16KB
+      linger.ms: 10                          # Aguarda 10ms antes de enviar
+      buffer.memory: 33554432                # Buffer de 32MB
+      compression.type: snappy               # Compressão Snappy
+      # Timeouts
+      request.timeout.ms: 30000              # 30 segundos
+      delivery.timeout.ms: 120000            # 2 minutos
 ```
 
-**Consumer**:
+**Consumer** (aplicação futura - não implementado ainda):
 
 ```yaml
 spring:
   kafka:
     consumer:
       group-id: pagamentos-group
-      auto-offset-reset: earliest  # Processa desde início
-      enable-auto-commit: false    # Controle manual de offset
-      key-deserializer: StringDeserializer
-      value-deserializer: JsonDeserializer
+      auto-offset-reset: earliest            # Processa desde início
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: br.com.sicredi.toolschallenge
 ```
+
+**Outbox Pattern - Publicação Transacional**:
+
+1. **Salvar evento**: Chamada a `OutboxService.criarEvento()` dentro da mesma transação da mudança de estado
+2. **Scheduler**: `OutboxPublisher` roda a cada **500ms** buscando eventos `PENDENTE`
+3. **Publicação**: Eventos são enviados ao Kafka via `KafkaTemplate`
+4. **Confirmação**: Após sucesso, evento é marcado como `PROCESSADO`
+5. **Retry**: Em caso de erro, incrementa `tentativas` e tenta novamente (max 3 tentativas)
+6. **Limpeza**: Eventos `PROCESSADO` são removidos após **7 dias** (função `limpar_outbox_processados()`)
+
+**Tópicos definidos dinamicamente** no código ao chamar `OutboxService.criarEvento(agregadoId, agregadoTipo, eventoTipo, payload, topicoKafka)`. Exemplos:
+- `"pagamentos"` - eventos de pagamento
+- `"estornos"` - eventos de estorno
+- `"adquirente"` - eventos de autorização
 
 ---
 
@@ -443,7 +891,7 @@ resilience4j:
         max-attempts: 3                          # 1 original + 2 retries
         wait-duration: 500ms                     # 500ms entre tentativas
         retry-exceptions:
-          - AdquirenteIndisponivelException
+          - br.com.sicredi.toolschallenge.shared.exception.ServicoIndisponivelException
           - java.net.ConnectException
           - java.net.SocketTimeoutException
 ```
@@ -732,6 +1180,62 @@ Lista estornos de um pagamento.
 #### `GET /estornos/{id}`
 
 Consulta estorno específico.
+
+### Admin (Tokens JWT)
+
+#### `POST /admin/tokens/{appName}`
+
+Gera token JWT para aplicação específica (endpoint público - sem autenticação).
+
+**Path Parameters**:
+- `appName`: Nome da aplicação (`frontend`, `mobile` ou `admin`)
+
+**Apps Disponíveis**:
+- `frontend`: scopes = `pagamentos:read`, `pagamentos:write`
+- `mobile`: scopes = `pagamentos:read`
+- `admin`: scopes = `pagamentos:read`, `pagamentos:write`, `estornos:read`, `estornos:write`
+
+**Response 200**:
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "appName": "frontend",
+  "scopes": ["pagamentos:read", "pagamentos:write"],
+  "expiresAt": "2025-12-04T10:30:00",
+  "expirationSeconds": 2592000
+}
+```
+
+**Exemplo de Uso** (PowerShell):
+
+```powershell
+# Gerar token para frontend
+$response = Invoke-RestMethod -Uri "http://localhost:8080/admin/tokens/frontend" -Method POST
+$token = $response.token
+
+# Usar token em requisições
+$headers = @{
+    "Authorization" = "Bearer $token"
+    "Chave-Idempotencia" = [guid]::NewGuid().ToString()
+    "Content-Type" = "application/json"
+}
+Invoke-RestMethod -Uri "http://localhost:8080/pagamentos" -Method POST -Headers $headers -Body $jsonBody
+```
+
+#### `GET /admin/tokens/apps`
+
+Lista apps disponíveis e seus scopes.
+
+**Response 200**:
+
+```json
+{
+  "frontend": ["pagamentos:read", "pagamentos:write"],
+  "mobile": ["pagamentos:read"],
+  "admin": ["pagamentos:read", "pagamentos:write", "estornos:read", "estornos:write"]
+}
+```
 
 ### Códigos de Erro
 
@@ -1046,8 +1550,6 @@ mvn test -Dtest=*IntegrationTest
 mvn test jacoco:report
 ```
 
-**Mais informações**: Ver [docs/TESTES_IDEMPOTENCIA.md](docs/TESTES_IDEMPOTENCIA.md) e [docs/TESTES_OUTBOX_PATTERN.md](docs/TESTES_OUTBOX_PATTERN.md)
-
 ---
 
 ## 🚀 Deploy e CI/CD
@@ -1085,18 +1587,6 @@ EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
 ```
 
----
-
-## 📈 Monitoramento
-
-### Stack Proposta
-
-```
-Aplicação → Micrometer → Prometheus → Grafana
-                            ↓
-                         Alertmanager
-```
-
 ### Dashboards Grafana
 
 **Painéis Principais**:
@@ -1107,141 +1597,6 @@ Aplicação → Micrometer → Prometheus → Grafana
 4. **JVM**: Memory, GC, threads
 5. **Kafka**: Offset lag, mensagens/s
 
-### Alertas Propostos
-
-| Alerta | Condição | Severidade |
-|--------|----------|------------|
-| Circuit Breaker OPEN | Estado = OPEN por > 1min | Critical |
-| Alta Taxa de Erro | 5xx > 5% por 5min | High |
-| Latência Alta | p95 > 1s por 5min | Medium |
-| Database Pool Cheio | Connections = max por 2min | High |
-
----
-
-## 🐛 Troubleshooting
-
-### Problema: 409 Conflict em requisição nova
-
-**Causa**: Chave idempotente duplicada ou não expirada no Redis.
-
-**Solução**:
-
-```bash
-# Limpar chave específica
-redis-cli -a redis123 DEL "idempotencia:550e8400-..."
-
-# Limpar todas (CUIDADO!)
-redis-cli -a redis123 FLUSHDB
-```
-
-### Problema: Circuit Breaker sempre OPEN
-
-**Causa**: Taxa de falhas do adquirente simulado muito alta.
-
-**Solução**: Reduzir `failure-rate` em `application.yml`:
-
-```yaml
-adquirente:
-  simulado:
-    failure-rate: 0.1  # 10% em vez de 20%
-```
-
-### Problema: Eventos não chegam no Kafka
-
-**Verificações**:
-
-1. Kafka rodando: `docker-compose ps kafka`
-2. Tópico existe: `docker exec -it kafka kafka-topics --list --bootstrap-server localhost:9092`
-3. Outbox pendente: `SELECT * FROM outbox_evento WHERE status = 'PENDENTE';`
-4. Logs do `OutboxPublisher`: Procurar por erros
-
-### Problema: Lock Distribuído não funciona
-
-**Verificações**:
-
-1. Redis rodando: `redis-cli -a redis123 ping`
-2. RedissonClient injetado: Verificar logs de startup
-3. Lock key correto: `redis-cli -a redis123 KEYS "estorno:*"`
-
----
-
-## ❓ FAQ
-
-### 1. Por que Monolito Modular em vez de Microserviços?
-
-Microserviços trazem complexidade operacional desde o dia 1. Monolito Modular permite:
-
-- ✅ Começar simples (1 deploy)
-- ✅ Evoluir a arquitetura conforme necessidade
-- ✅ Migrar módulos específicos quando justificável
-
-### 2. Como saber quando migrar um módulo para microserviço?
-
-**Sinais**:
-
-- Módulo tem carga muito maior que outros
-- Time cresceu e precisa de autonomia de deploy
-- Tecnologia diferente seria melhor
-- Necessidade de deploy em regiões diferentes
-
-### 3. Posso ter transações entre módulos?
-
-**No monolito**: Sim, `@Transactional` funciona entre módulos.
-
-**Em microserviços**: Não, cada serviço tem seu próprio banco. Use **Saga Pattern** ou **Outbox Pattern**.
-
-### 4. Shared/Infra não vai gerar acoplamento?
-
-**Correto**: `shared/` tem apenas utilitários genéricos (configs, exceptions, annotations).
-
-**Errado**: `shared/` NÃO deve ter lógica de negócio, entidades JPA compartilhadas ou services que orquestram módulos.
-
-### 5. Como evitar over-engineering?
-
-- Use recursos nativos do Spring/Java antes de criar código customizado
-- Siga o Princípio YAGNI (You Aren't Gonna Need It)
-- Use a "Regra dos 3": Só crie abstração após 3º uso repetido
-- Prefira Bean Validation padrão a annotations customizadas
-
-Ver seção completa de FAQ em [.github/instructions/copilot-instructions.md](.github/instructions/copilot-instructions.md)
-
----
-
-## 📚 Referências
-
-### Documentos Internos
-
-- [Regras de Desenvolvimento](.github/instructions/copilot-instructions.md)
-- [Sistema de Auditoria](docs/AUDITORIA.md)
-- [Locks Distribuídos](docs/LOCK_DISTRIBUIDO.md)
-- [Testes de Idempotência](docs/TESTES_IDEMPOTENCIA.md)
-- [Testes do Outbox Pattern](docs/TESTES_OUTBOX_PATTERN.md)
-- [Exemplos API Pagamento](EXEMPLOS_API_PAGAMENTO.md)
-- [Exemplos API Estorno](EXEMPLOS_API_ESTORNO.md)
-
-### Tecnologias
-
-- [Spring Boot](https://spring.io/projects/spring-boot)
-- [Resilience4j](https://resilience4j.readme.io/)
-- [Redisson](https://github.com/redisson/redisson)
-- [Apache Kafka](https://kafka.apache.org/)
-- [PostgreSQL](https://www.postgresql.org/)
-
-### Padrões
-
-- [Outbox Pattern](https://microservices.io/patterns/data/transactional-outbox.html)
-- [Circuit Breaker](https://martinfowler.com/bliki/CircuitBreaker.html)
-- [Idempotency](https://stripe.com/docs/api/idempotent_requests)
-- [Modular Monolith](https://www.kamilgrzybek.com/blog/posts/modular-monolith-primer)
-- [Saga Pattern](https://microservices.io/patterns/data/saga.html)
-
-### Princípios de Design
-
-- [KISS Principle](https://en.wikipedia.org/wiki/KISS_principle)
-- [YAGNI](https://martinfowler.com/bliki/Yagni.html)
-- [Occam's Razor](https://fs.blog/occams-razor/)
-
----
 
 ## 📄 Licença
 
@@ -1249,5 +1604,5 @@ Projeto desenvolvido para desafio técnico Sicredi - Uso Interno.
 
 ---
 
-**Última Atualização**: 02/11/2025  
+**Última Atualização**: 04/11/2025  
 **Versão**: 0.0.1-SNAPSHOT  

@@ -236,6 +236,13 @@
 							<artifactId>lombok</artifactId>
 						</path>
 					</annotationProcessorPaths>
+					<!-- Suprimir warnings de deprecação do @MockBean -->
+					<compilerArgs>
+						<arg>-Xlint:all</arg>
+						<arg>-Xlint:-deprecation</arg>
+						<arg>-Xlint:-removal</arg>
+					</compilerArgs>
+					<showWarnings>false</showWarnings>
 				</configuration>
 			</plugin>
 			<plugin>

@@ -28,12 +28,33 @@
     </appender>
 
     <!-- Loggers específicos -->
-    <logger name="br.com.sicredi.toolschallenge" level="DEBUG"/>
+    <logger name="br.com.sicredi.toolschallenge" level="INFO"/>
+    
+    <!-- Silenciar CorrelationIdFilter DEBUG logs -->
+    <logger name="br.com.sicredi.toolschallenge.infra.tracing.CorrelationIdFilter" level="INFO"/>
+    
+    <!-- Silenciar logs de schedulers (DLQ/Reprocessamento) -->
+    <logger name="br.com.sicredi.toolschallenge.infra.auditoria.service.AuditoriaScheduler" level="ERROR"/>
+    <logger name="br.com.sicredi.toolschallenge.infra.outbox.processor.OutboxProcessor" level="ERROR"/>
+    <logger name="br.com.sicredi.toolschallenge.infra.scheduled.ReprocessamentoScheduler" level="ERROR"/>
+    
+    <!-- Silenciar warnings repetitivos de DLQ (apenas ERRORs críticos) -->
+    <logger name="br.com.sicredi.toolschallenge.pagamento.service.PagamentoService" level="ERROR"/>
+    <logger name="br.com.sicredi.toolschallenge.estorno.service.EstornoService" level="ERROR"/>
+    
+    <!-- Silenciar warnings do Spring Data Redis sobre repository assignment -->
+    <logger name="org.springframework.data.repository.config.RepositoryConfigurationExtensionSupport" level="ERROR"/>
+    <logger name="org.springframework.data.repository.config.RepositoryConfigurationDelegate" level="ERROR"/>
+    
+    <!-- Silenciar baggage propagation debug -->
+    <logger name="io.micrometer.tracing.otel.propagation.BaggageTextMapPropagator" level="WARN"/>
+    
+    <!-- Outros frameworks -->
     <logger name="org.springframework.web" level="INFO"/>
     <logger name="org.springframework.kafka" level="WARN"/>
     <logger name="org.apache.kafka" level="WARN"/>
     <logger name="org.hibernate" level="INFO"/>
-    <logger name="io.micrometer.tracing" level="DEBUG"/>
+    <logger name="io.micrometer.tracing" level="WARN"/>
 
     <!-- Root logger -->
     <root level="INFO">
