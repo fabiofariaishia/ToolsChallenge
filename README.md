@@ -1086,18 +1086,41 @@ curl http://localhost:9090/api/v1/targets
 
 ### Swagger UI
 
-**URL**: `http://localhost:8080/swagger-ui.html`
+**URL**: http://localhost:8080/swagger-ui.html
 
-Documentação interativa de todas as APIs com:
+Documentação interativa **OpenAPI 3.0** de todas as APIs com:
 
-- Schemas de request/response
-- Validações
-- Códigos de erro
-- Exemplos de uso
+- ✅ **Schemas completos** de request/response
+- ✅ **Validações** de campos (`@NotBlank`, `@Size`, `@DecimalMin`)
+- ✅ **Códigos de erro** documentados
+- ✅ **Exemplos prontos** para testar
+- ✅ **Try it out** - Execute requests direto do navegador
+- ✅ **Autenticação JWT** integrada (clique em "Authorize")
+
+**Como usar**:
+1. Acesse http://localhost:8080/swagger-ui.html
+2. Clique em **"Authorize"** (cadeado 🔒)
+3. Gere um token em `POST /admin/tokens/{appName}`
+4. Cole o token no formato: `Bearer <seu-token>`
+5. Teste qualquer endpoint clicando em **"Try it out"**
 
 ---
 
 ## 🌐 APIs e Endpoints
+
+> **💡 Dica**: Use o [Swagger UI](http://localhost:8080/swagger-ui.html) para testar todas as APIs interativamente!
+
+### Autenticação
+
+Todos os endpoints (exceto `/admin/tokens/*`) requerem **autenticação JWT** via header `Authorization: Bearer <token>`.
+
+**Gerar Token**:
+```powershell
+# PowerShell
+$response = Invoke-RestMethod -Uri "http://localhost:8080/admin/tokens/admin" -Method POST
+$token = $response.token
+Write-Host "Token gerado: $token"
+```
 
 ### Pagamentos
 
@@ -1105,9 +1128,11 @@ Documentação interativa de todas as APIs com:
 
 Cria novo pagamento (idempotente).
 
-**Headers**:
+**Autenticação**: Requer scope `pagamentos:write`
 
-- `Idempotency-Key` (obrigatório): UUID único
+**Headers**:
+- `Authorization: Bearer <token>` (obrigatório)
+- `Chave-Idempotencia: <UUID>` (obrigatório)
 - `Content-Type: application/json`
 
 **Request**:
@@ -1120,67 +1145,211 @@ Cria novo pagamento (idempotente).
 }
 ```
 
-**Response 201**:
+**Validações**:
+- `descricao`: obrigatório, entre 3 e 500 caracteres
+- `valor`: obrigatório, maior que 0
+- `tipoPagamento`: obrigatório, valores aceitos: `CARTAO_CREDITO`, `CARTAO_DEBITO`, `PIX`
+
+**Response 201 Created**:
 
 ```json
 {
   "id": 123,
+  "idTransacao": "TXN-123-2025",
   "descricao": "Compra na Loja X",
   "valor": 150.50,
   "tipoPagamento": "CARTAO_CREDITO",
-  "status": "PROCESSADO",
-  "nsu": "123456789",
+  "status": "AUTORIZADO",
+  "nsu": "1234567890",
   "codigoAutorizacao": "AUTH987654",
-  "dataCriacao": "2025-11-02T10:30:00Z"
+  "dataCriacao": "2025-11-05T10:30:00-03:00"
 }
 ```
+
+**Possíveis Status**:
+- `AUTORIZADO` - Pagamento aprovado pelo adquirente
+- `NEGADO` - Pagamento recusado pelo adquirente
+- `PENDENTE` - Aguardando processamento (será reprocessado em background)
+
+---
 
 #### `GET /pagamentos/{id}`
 
 Consulta pagamento por ID.
 
+**Autenticação**: Requer scope `pagamentos:read`
+
+**Path Parameters**:
+- `id`: ID do pagamento (Long)
+
+**Response 200 OK**:
+```json
+{
+  "id": 123,
+  "idTransacao": "TXN-123-2025",
+  "descricao": "Compra na Loja X",
+  "valor": 150.50,
+  "status": "AUTORIZADO",
+  "nsu": "1234567890",
+  "codigoAutorizacao": "AUTH987654",
+  "dataCriacao": "2025-11-05T10:30:00-03:00"
+}
+```
+
+**Response 404 Not Found**: Pagamento não encontrado
+
+---
+
 #### `GET /pagamentos`
 
-Lista todos os pagamentos.
+Lista todos os pagamentos (paginado).
+
+**Autenticação**: Requer scope `pagamentos:read`
+
+**Query Parameters** (opcionais):
+- `page`: Número da página (padrão: 0)
+- `size`: Tamanho da página (padrão: 20)
+- `sort`: Ordenação (ex: `dataCriacao,desc`)
+
+**Response 200 OK**:
+```json
+{
+  "content": [
+    {
+      "id": 123,
+      "idTransacao": "TXN-123-2025",
+      "valor": 150.50,
+      "status": "AUTORIZADO",
+      "dataCriacao": "2025-11-05T10:30:00-03:00"
+    }
+  ],
+  "totalElements": 50,
+  "totalPages": 3,
+  "number": 0,
+  "size": 20
+}
+```
+
+---
 
 ### Estornos
 
-#### `POST /pagamentos/{id}/estornos`
+#### `POST /estornos`
 
 Solicita estorno de pagamento (idempotente).
 
-**Headers**:
+**Autenticação**: Requer scope `estornos:write`
 
-- `Idempotency-Key` (obrigatório)
+**Headers**:
+- `Authorization: Bearer <token>` (obrigatório)
+- `Chave-Idempotencia: <UUID>` (obrigatório)
+- `Content-Type: application/json`
 
 **Request**:
 
 ```json
 {
+  "idTransacao": "TXN-123-2025",
   "motivo": "Cliente solicitou cancelamento"
 }
 ```
 
-**Response 201**:
+**Validações**:
+- `idTransacao`: obrigatório, deve existir e estar AUTORIZADO
+- `motivo`: opcional, máximo 500 caracteres
+- **Janela**: Pagamento deve ter < 24h (regra de negócio)
+- **Valor**: Estorno sempre é do valor total do pagamento
+
+**Response 201 Created**:
 
 ```json
 {
   "id": 456,
-  "pagamentoId": 123,
+  "idEstorno": "EST-456-2025",
+  "idTransacao": "TXN-123-2025",
   "valor": 150.50,
   "motivo": "Cliente solicitou cancelamento",
-  "status": "PROCESSADO",
-  "dataCriacao": "2025-11-02T11:00:00Z"
+  "status": "CANCELADO",
+  "nsu": "9876543210",
+  "codigoAutorizacao": "REV123456",
+  "dataCriacao": "2025-11-05T11:00:00-03:00"
 }
 ```
 
-#### `GET /pagamentos/{id}/estornos`
+**Possíveis Status**:
+- `CANCELADO` - Estorno aprovado pelo adquirente
+- `NEGADO` - Estorno recusado (ex: fora da janela de 24h)
+- `PENDENTE` - Aguardando processamento
 
-Lista estornos de um pagamento.
+**Response 422 Unprocessable Entity**:
+```json
+{
+  "timestamp": "2025-11-05T11:00:00-03:00",
+  "status": 422,
+  "error": "Unprocessable Entity",
+  "message": "Pagamento fora da janela de estorno (24h)"
+}
+```
+
+---
 
 #### `GET /estornos/{id}`
 
 Consulta estorno específico.
+
+**Autenticação**: Requer scope `estornos:read`
+
+**Path Parameters**:
+- `id`: ID do estorno (Long)
+
+**Response 200 OK**:
+```json
+{
+  "id": 456,
+  "idEstorno": "EST-456-2025",
+  "idTransacao": "TXN-123-2025",
+  "valor": 150.50,
+  "status": "CANCELADO",
+  "dataCriacao": "2025-11-05T11:00:00-03:00"
+}
+```
+
+---
+
+#### `GET /estornos`
+
+Lista todos os estornos (paginado).
+
+**Autenticação**: Requer scope `estornos:read`
+
+**Query Parameters** (opcionais):
+- `page`: Número da página (padrão: 0)
+- `size`: Tamanho da página (padrão: 20)
+- `sort`: Ordenação (ex: `dataCriacao,desc`)
+
+---
+
+#### `GET /estornos/pagamento/{idTransacao}`
+
+Lista estornos de um pagamento específico.
+
+**Autenticação**: Requer scope `estornos:read`
+
+**Path Parameters**:
+- `idTransacao`: ID de transação do pagamento (String)
+
+---
+
+#### `GET /estornos/status/{status}`
+
+Lista estornos por status.
+
+**Autenticação**: Requer scope `estornos:read`
+
+**Path Parameters**:
+- `status`: Status do estorno (`CANCELADO`, `NEGADO`, `PENDENTE`)
+
+---
 
 ### Admin (Tokens JWT)
 
@@ -1240,16 +1409,48 @@ Lista apps disponíveis e seus scopes.
 
 ### Códigos de Erro
 
-| Código | Descrição |
-|--------|-----------|
-| `400 Bad Request` | Validação falhou |
-| `404 Not Found` | Recurso não encontrado |
-| `409 Conflict` | Chave idempotente duplicada |
-| `422 Unprocessable Entity` | Regra de negócio violada |
-| `500 Internal Server Error` | Erro inesperado |
-| `503 Service Unavailable` | Circuit Breaker OPEN |
+| Código | Descrição | Quando Ocorre |
+|--------|-----------|---------------|
+| `400 Bad Request` | Validação falhou | Campos obrigatórios faltando, formato inválido |
+| `401 Unauthorized` | Não autenticado | Token JWT ausente ou inválido |
+| `403 Forbidden` | Sem permissão | Token válido mas sem scopes necessários |
+| `404 Not Found` | Recurso não encontrado | ID de pagamento/estorno não existe |
+| `409 Conflict` | Chave idempotente duplicada | Mesmo `Chave-Idempotencia` já processado |
+| `422 Unprocessable Entity` | Regra de negócio violada | Estorno fora da janela de 24h, pagamento já estornado |
+| `500 Internal Server Error` | Erro inesperado | Erro não tratado na aplicação |
+| `503 Service Unavailable` | Circuit Breaker OPEN | Adquirente indisponível (muitas falhas consecutivas) |
 
-**Mais exemplos**: Ver [EXEMPLOS_API_PAGAMENTO.md](EXEMPLOS_API_PAGAMENTO.md) e [EXEMPLOS_API_ESTORNO.md](EXEMPLOS_API_ESTORNO.md)
+**Exemplo de Response de Erro**:
+
+```json
+{
+  "timestamp": "2025-11-05T11:00:00-03:00",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Validação falhou",
+  "errors": [
+    {
+      "field": "descricao",
+      "message": "não deve estar em branco"
+    },
+    {
+      "field": "valor",
+      "message": "deve ser maior que 0"
+    }
+  ],
+  "path": "/pagamentos"
+}
+```
+
+---
+
+### Documentação Adicional
+
+- 📄 **Swagger UI Interativo**: http://localhost:8080/swagger-ui.html
+- 📄 **Exemplos de Pagamentos**: [docs/EXEMPLOS_API_PAGAMENTO.md](docs/EXEMPLOS_API_PAGAMENTO.md)
+- 📄 **Exemplos de Estornos**: [docs/EXEMPLOS_API_ESTORNO.md](docs/EXEMPLOS_API_ESTORNO.md)
+- 📄 **Testes de Idempotência**: [docs/TESTES_IDEMPOTENCIA.md](docs/TESTES_IDEMPOTENCIA.md)
+- 📄 **Outbox Pattern**: [docs/TESTES_OUTBOX_PATTERN.md](docs/TESTES_OUTBOX_PATTERN.md)
 
 ---
 
