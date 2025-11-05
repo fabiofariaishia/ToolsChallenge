@@ -42,4 +42,4 @@ docker/redis/data/
 ### Documentation ###
 docs/
 .github/instructions/copilot-instructions.md
-.github
+.github/

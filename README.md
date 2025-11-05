@@ -3,17 +3,18 @@
 ## 📋 Índice
 
 1. [Visão Geral](#-visão-geral)
-2. [Stack Tecnológico](#-stack-tecnológico)
-3. [Estrutura de Pastas](#-estrutura-de-pastas)
-4. [Banco de Dados](#-banco-de-dados)
-5. [Mensageria (Kafka)](#-mensageria-kafka)
-6. [Cache e Locks Distribuídos](#-cache-e-locks-distribuídos)
-7. [Resiliência (Resilience4j)](#-resiliência-resilience4j)
-8. [Observabilidade](#-observabilidade)
-9. [APIs e Endpoints](#-apis-e-endpoints)
-10. [Configuração e Ambiente](#-configuração-e-ambiente)
-11. [Testes](#-testes)
-12. [Deploy e CI/CD](#-deploy-e-cicd)
+2. [Quick Start](#-quick-start)
+3. [Stack Tecnológico](#-stack-tecnológico)
+4. [Estrutura de Pastas](#-estrutura-de-pastas)
+5. [Banco de Dados](#-banco-de-dados)
+6. [Mensageria (Kafka)](#-mensageria-kafka)
+7. [Cache e Locks Distribuídos](#-cache-e-locks-distribuídos)
+8. [Resiliência (Resilience4j)](#-resiliência-resilience4j)
+9. [Observabilidade](#-observabilidade)
+10. [APIs e Endpoints](#-apis-e-endpoints)
+11. [Configuração e Ambiente](#-configuração-e-ambiente)
+12. [Testes](#-testes)
+13. [Licença](#-licença)
 
 ---
 
@@ -1322,58 +1323,32 @@ java -jar target/toolschallenge-0.0.1-SNAPSHOT.jar
 ### Estrutura de Testes
 
 ```
-src/test/java/
-├── integration/
-│   ├── PagamentoIntegrationTest.java
-│   ├── EstornoIntegrationTest.java
-│   └── IdempotenciaIntegrationTest.java
-└── unit/
-    ├── PagamentoServiceTest.java
-    ├── EstornoServiceTest.java
-    └── AdquirenteServiceTest.java
+src/test/java/br/com/sicredi/toolschallenge/
+├── adquirente/service/          # Testes unitários Adquirente
+├── pagamento/
+│   ├── controller/              # Testes unitários Controller
+│   └── service/                 # Testes unitários Service
+├── estorno/
+│   ├── controller/              # Testes unitários Controller
+│   └── service/                 # Testes unitários Service
+├── infra/
+│   ├── auditoria/               # Testes de auditoria
+│   ├── idempotencia/            # Testes de idempotência
+│   ├── outbox/                  # Testes do Outbox Pattern
+│   ├── scheduled/               # Testes de reprocessamento
+│   └── tracing/                 # Testes de Correlation ID
+└── shared/security/             # Testes de JWT
 ```
 
-### Testcontainers
+### Testes Unitários (@WebMvcTest)
 
-Testes de integração usam containers Docker:
-
-- PostgreSQL (via Testcontainers)
-- Kafka (via Testcontainers)
-- Redis (via Testcontainers)
-
-**Exemplo**:
-
-```java
-@SpringBootTest
-@Testcontainers
-class PagamentoIntegrationTest {
-    
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
-    
-    @Container
-    static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"));
-    
-    @Test
-    void deveCriarPagamentoComSucesso() {
-        // ...
-    }
-}
-```
-
-### Testes com Spring Security
-
-O projeto implementa testes de API com **Spring Security** e **JWT** usando duas abordagens:
-
-#### **1. Testes Unitários (@WebMvcTest)**
-
-Testes de **slice** focados na camada de controller, com **mocks** de dependências de segurança.
+O projeto utiliza **testes unitários** (slice tests) focados na camada de controller, com mocks de dependências.
 
 **Características**:
-- ✅ **Rápidos** (< 1 segundo)
-- ✅ **Isolados** (sem infraestrutura externa)
-- ✅ **Focados** (apenas controller + validation + exception handling)
-- ✅ **Sem mocks de Service** (testam lógica de negócio separadamente)
+- ✅ **Rápidos** (< 1 segundo cada)
+- ✅ **Isolados** (todos os dependencies mockados)
+- ✅ **Focados** (testam 1 comportamento por vez)
+- ✅ **Executados a cada build**
 
 **Configuração**:
 
@@ -1415,188 +1390,55 @@ class EstornoControllerTest {
 - **NÃO** impede o Spring de escanear e criar os beans durante inicialização do contexto
 - Sem `@MockBean`, ApplicationContext falha com `NoSuchBeanDefinitionException`
 
-**Quando usar**:
-- ✅ Validar status HTTP corretos (201, 400, 404, etc)
-- ✅ Validar serialização JSON de request/response
-- ✅ Validar Bean Validation (`@NotBlank`, `@Size`, etc)
-- ✅ Validar tratamento de exceções via `@ControllerAdvice`
-- ❌ **Não testar**: Autenticação JWT real, autorização por scopes, integração com banco
+**O que é testado**:
+- ✅ Status HTTP corretos (201, 400, 404, etc)
+- ✅ Serialização JSON de request/response
+- ✅ Bean Validation (`@NotBlank`, `@Size`, `@DecimalMin`, etc)
+- ✅ Tratamento de exceções via `@ControllerAdvice`
+- ✅ Lógica de negócio nos Services (com mocks de repositories)
 
-#### **2. Testes de Integração (@SpringBootTest)**
+### Cobertura de Testes
 
-Testes **end-to-end** com contexto completo da aplicação e infraestrutura real.
+O projeto possui **13 classes de teste** cobrindo:
 
-**Características**:
-- ⏳ **Lentos** (> 5 segundos - subir containers Docker)
-- ⏳ **Complexos** (PostgreSQL + Redis + Kafka via Testcontainers)
-- ✅ **Reais** (testa TODO o fluxo: JWT → Filter → Controller → Service → Repository)
-- ✅ **Confiáveis** (se passar, funciona em produção)
+| Módulo | Classes Testadas | Cenários |
+|--------|------------------|----------|
+| **Pagamento** | PagamentoController, PagamentoService | Criação, consulta, validações, DLQ |
+| **Estorno** | EstornoController, EstornoService | Criação, consulta, validações, DLQ, lock distribuído |
+| **Adquirente** | AdquirenteService, AdquirenteSimuladoService | Autorização, Circuit Breaker, Retry, Chaos |
+| **Infraestrutura** | OutboxService, KafkaPublisherService, AuditoriaService | Outbox Pattern, Kafka, Auditoria |
+| **Scheduled** | ReprocessamentoScheduler | DLQ reprocessing |
+| **Tracing** | CorrelationIdFilter | Correlation ID propagation |
+| **Idempotência** | IdempotenciaService | Cache Redis, fallback PostgreSQL |
+| **Security** | JwtService | Geração e validação de tokens JWT |
 
-**Configuração**:
-
-```java
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureMockMvc
-@Testcontainers
-class SecurityIntegrationTest {
-    
-    @Container
-    static PostgreSQLContainer<?> postgres = ...;
-    
-    @Container
-    static GenericContainer<?> redis = ...;
-    
-    @Autowired
-    private MockMvc mockMvc;
-    
-    @Autowired
-    private JwtService jwtService;
-    
-    private String validToken;
-    
-    @BeforeEach
-    void setUp() {
-        // Gerar token JWT REAL com scopes necessários
-        Map<String, Object> claims = Map.of(
-            "scopes", List.of("estornos:read", "estornos:write")
-        );
-        validToken = jwtService.generateToken(claims, "integration-test");
-    }
-    
-    @Test
-    void deveRetornar401QuandoTokenAusente() throws Exception {
-        mockMvc.perform(post("/estornos")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
-            .andExpect(status().isUnauthorized());
-    }
-    
-    @Test
-    void deveRetornar403QuandoTokenSemScopes() throws Exception {
-        // Token VÁLIDO mas SEM scopes necessários
-        Map<String, Object> claims = Map.of("scopes", List.of("pagamentos:read"));
-        String tokenSemScopes = jwtService.generateToken(claims, "test");
-        
-        mockMvc.perform(post("/estornos")
-                .header("Authorization", "Bearer " + tokenSemScopes)
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{}"))
-            .andExpect(status().isForbidden());
-    }
-    
-    @Test
-    void deveCriarEstornoComTokenValido() throws Exception {
-        // Token VÁLIDO com scopes corretos
-        mockMvc.perform(post("/estornos")
-                .header("Authorization", "Bearer " + validToken)
-                .header("Chave-Idempotencia", UUID.randomUUID().toString())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(validRequestJson))
-            .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.id").exists());
-    }
-}
-```
-
-**Quando usar**:
-- ✅ Validar autenticação JWT real (401, 403)
-- ✅ Validar autorização por scopes (`@PreAuthorize`)
-- ✅ Validar idempotência real com Redis
-- ✅ Validar integração completa (API → Service → Repository → DB)
-- ✅ **Smoke tests** antes de deploy em produção
-
-#### **Comparação: @WebMvcTest vs @SpringBootTest**
-
-| Aspecto | @WebMvcTest (Unit) | @SpringBootTest (Integration) |
-|---------|-------------------|------------------------------|
-| **Velocidade** | ⚡ < 1s | ⏳ > 5s (Testcontainers) |
-| **Escopo** | 🎯 Controller apenas | 🌍 Aplicação completa |
-| **Dependências** | 🎭 Mocks (`@MockBean`) | ✅ Reais (banco, Redis, Kafka) |
-| **Security** | 🎭 `@WithMockUser` (simula) | ✅ JWT real via `JwtService` |
-| **Quando rodar** | ✅ A cada commit | ✅ Antes de merge/deploy |
-| **Finalidade** | Validar contrato API | Validar funcionamento real |
-
-```java
-@SpringBootTest
-@Testcontainers
-class PagamentoIntegrationTest {
-    
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
-    
-    @Container
-    static KafkaContainer kafka = new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.0"));
-    
-    @Test
-    void deveCriarPagamentoComSucesso() {
-        // ...
-    }
-}
-```
+**Total**: ~125+ testes unitários
 
 ### Executar Testes
 
 ```bash
-# Todos os testes
+# Todos os testes unitários
 mvn test
 
-# Apenas testes unitários
-mvn test -Dtest=*Test
+# Testes de um módulo específico
+mvn test -Dtest=PagamentoServiceTest
 
-# Apenas testes de integração
-mvn test -Dtest=*IntegrationTest
+# Testes com output detalhado
+mvn test -X
 
-# Com cobertura
+# Com cobertura (JaCoCo)
 mvn test jacoco:report
+# Relatório em: target/site/jacoco/index.html
+```
+
+### Exemplo de Saída
+
+```
+[INFO] Tests run: 125, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
 ```
 
 ---
-
-## 🚀 Deploy e CI/CD
-
-### Pipeline GitHub Actions (Proposto)
-
-```yaml
-name: CI/CD Pipeline
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-      - run: mvn clean verify
-      - run: docker build -t toolschallenge:${{ github.sha }} .
-```
-
-### Dockerfile
-
-```dockerfile
-FROM eclipse-temurin:17-jre-alpine
-WORKDIR /app
-COPY target/*.jar app.jar
-EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
-```
-
-### Dashboards Grafana
-
-**Painéis Principais**:
-
-1. **HTTP Metrics**: Latência, throughput, erros por endpoint
-2. **Circuit Breaker**: Estado, taxa de falhas, fallbacks
-3. **Database**: Conexões ativas, latência de queries
-4. **JVM**: Memory, GC, threads
-5. **Kafka**: Offset lag, mensagens/s
-
 
 ## 📄 Licença
 
