@@ -89,8 +89,8 @@ public class OpenApiConfig {
                     "- Locks Distribuídos com Redisson (Redis)\n" +
                     "- Observabilidade com Prometheus, Grafana e Jaeger\n\n" +
                     "**Como usar:**\n" +
-                    "1. Obtenha um token JWT (endpoint de autenticação - futuro)\n" +
-                    "2. Clique em 'Authorize' e insira: `Bearer {seu_token}`\n" +
+                    "1. Obtenha um token JWT (endpoint de autenticação - Admin)\n" +
+                    "2. Clique em 'Authorize' e insira o token gerado" +
                     "3. Teste os endpoints de Pagamentos e Estornos\n" +
                     "4. Use header `Chave-Idempotencia` (UUID) em operações POST"
                 );

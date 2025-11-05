@@ -69,7 +69,7 @@ public class PagamentoMapper {
             .parcelas(entity.getParcelas())
             .build();
 
-        // Criar TransacaoDTO com todos os dados
+        // Criar TransacaoDTO com nsu, codigoAutorizacao e status no nível da transação
         TransacaoDTO transacao = TransacaoDTO.builder()
             .cartao(entity.getCartaoMascarado())
             .id(entity.getIdTransacao())
@@ -77,7 +77,7 @@ public class PagamentoMapper {
             .formaPagamento(formaPagamento)
             .nsu(entity.getNsu())
             .codigoAutorizacao(entity.getCodigoAutorizacao())
-            .status(entity.getStatus())
+            .status(entity.getStatus().name())
             .build();
 
         // Retornar PagamentoResponseDTO com TransacaoDTO aninhado

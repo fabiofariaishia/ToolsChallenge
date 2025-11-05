@@ -1,8 +1,11 @@
 package br.com.sicredi.toolschallenge.estorno.controller;
 
 import br.com.sicredi.toolschallenge.estorno.domain.StatusEstorno;
+import br.com.sicredi.toolschallenge.estorno.dto.DescricaoEstornoDTO;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoRequestDTO;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoResponseDTO;
+import br.com.sicredi.toolschallenge.estorno.dto.FormaPagamentoEstornoDTO;
+import br.com.sicredi.toolschallenge.estorno.dto.TransacaoEstornoDTO;
 import br.com.sicredi.toolschallenge.estorno.service.EstornoService;
 import br.com.sicredi.toolschallenge.shared.exception.GlobalExceptionHandler;
 import br.com.sicredi.toolschallenge.shared.exception.RecursoNaoEncontradoException;
@@ -100,7 +103,6 @@ class EstornoControllerTest {
     void deveCriarEstornoComSucesso() throws Exception {
         // Arrange
         String idTransacao = UUID.randomUUID().toString();
-        String idEstorno = UUID.randomUUID().toString();
         String idempotencyKey = UUID.randomUUID().toString();
 
         EstornoRequestDTO request = EstornoRequestDTO.builder()
@@ -109,17 +111,30 @@ class EstornoControllerTest {
             .motivo("Cliente solicitou cancelamento")
             .build();
 
-        EstornoResponseDTO responseEsperado = EstornoResponseDTO.builder()
-            .idTransacao(idTransacao)
-            .idEstorno(idEstorno)
-            .status(StatusEstorno.CANCELADO)
+        // Construir estrutura aninhada conforme nova estrutura de DTOs
+        DescricaoEstornoDTO descricao = DescricaoEstornoDTO.builder()
             .valor(new BigDecimal("150.00"))
-            .dataHora(OffsetDateTime.now())
+            .dataHora("04/11/2025 18:30:00")
+            .estabelecimento("PetShop Mundo cão")
             .nsu("0987654321")
             .codigoAutorizacao("AUTH123456")
-            .motivo("Cliente solicitou cancelamento")
-            .criadoEm(OffsetDateTime.now())
-            .atualizadoEm(OffsetDateTime.now())
+            .status(StatusEstorno.CANCELADO.name())
+            .build();
+
+        FormaPagamentoEstornoDTO formaPagamento = FormaPagamentoEstornoDTO.builder()
+            .tipo("AVISTA")
+            .parcelas(1)
+            .build();
+
+        TransacaoEstornoDTO transacao = TransacaoEstornoDTO.builder()
+            .cartao("4444********1234")
+            .id(idTransacao)
+            .descricao(descricao)
+            .formaPagamento(formaPagamento)
+            .build();
+
+        EstornoResponseDTO responseEsperado = EstornoResponseDTO.builder()
+            .transacao(transacao)
             .build();
 
         when(estornoService.criarEstorno(any(EstornoRequestDTO.class)))
@@ -131,13 +146,11 @@ class EstornoControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.idTransacao").value(idTransacao))
-            .andExpect(jsonPath("$.idEstorno").value(idEstorno))
-            .andExpect(jsonPath("$.status").value("CANCELADO"))
-            .andExpect(jsonPath("$.valor").value(150.00))
-            .andExpect(jsonPath("$.nsu").value("0987654321"))
-            .andExpect(jsonPath("$.codigoAutorizacao").value("AUTH123456"))
-            .andExpect(jsonPath("$.motivo").value("Cliente solicitou cancelamento"));
+            .andExpect(jsonPath("$.transacao.id").value(idTransacao))
+            .andExpect(jsonPath("$.transacao.descricao.status").value("CANCELADO"))
+            .andExpect(jsonPath("$.transacao.descricao.valor").value(150.00))
+            .andExpect(jsonPath("$.transacao.descricao.nsu").value("0987654321"))
+            .andExpect(jsonPath("$.transacao.descricao.codigoAutorizacao").value("AUTH123456"));
 
         verify(estornoService, times(1)).criarEstorno(any(EstornoRequestDTO.class));
     }
@@ -193,12 +206,29 @@ class EstornoControllerTest {
         String idEstorno = UUID.randomUUID().toString();
         String idTransacao = UUID.randomUUID().toString();
 
-        EstornoResponseDTO responseEsperado = EstornoResponseDTO.builder()
-            .idEstorno(idEstorno)
-            .idTransacao(idTransacao)
-            .status(StatusEstorno.CANCELADO)
+        DescricaoEstornoDTO descricao = DescricaoEstornoDTO.builder()
             .valor(new BigDecimal("250.00"))
-            .motivo("Produto não entregue")
+            .dataHora("04/11/2025 18:30:00")
+            .estabelecimento("Loja XYZ")
+            .nsu("1234567890")
+            .codigoAutorizacao("AUTH999")
+            .status(StatusEstorno.CANCELADO.name())
+            .build();
+
+        FormaPagamentoEstornoDTO formaPagamento = FormaPagamentoEstornoDTO.builder()
+            .tipo("AVISTA")
+            .parcelas(1)
+            .build();
+
+        TransacaoEstornoDTO transacao = TransacaoEstornoDTO.builder()
+            .cartao("4444********1234")
+            .id(idTransacao)
+            .descricao(descricao)
+            .formaPagamento(formaPagamento)
+            .build();
+
+        EstornoResponseDTO responseEsperado = EstornoResponseDTO.builder()
+            .transacao(transacao)
             .build();
 
         when(estornoService.buscarPorIdEstorno(idEstorno))
@@ -207,11 +237,9 @@ class EstornoControllerTest {
         // Act & Assert
         mockMvc.perform(get("/estornos/{idEstorno}", idEstorno))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.idEstorno").value(idEstorno))
-            .andExpect(jsonPath("$.idTransacao").value(idTransacao))
-            .andExpect(jsonPath("$.status").value("CANCELADO"))
-            .andExpect(jsonPath("$.valor").value(250.00))
-            .andExpect(jsonPath("$.motivo").value("Produto não entregue"));
+            .andExpect(jsonPath("$.transacao.id").value(idTransacao))
+            .andExpect(jsonPath("$.transacao.descricao.status").value("CANCELADO"))
+            .andExpect(jsonPath("$.transacao.descricao.valor").value(250.00));
 
         verify(estornoService, times(1)).buscarPorIdEstorno(idEstorno);
     }
@@ -255,16 +283,26 @@ class EstornoControllerTest {
     @DisplayName("6. GET /estornos → 200 OK (lista todos)")
     void deveListarTodosEstornos() throws Exception {
         // Arrange
-        EstornoResponseDTO estorno1 = EstornoResponseDTO.builder()
-            .idEstorno(UUID.randomUUID().toString())
-            .status(StatusEstorno.CANCELADO)
+        DescricaoEstornoDTO desc1 = DescricaoEstornoDTO.builder()
             .valor(new BigDecimal("100.00"))
+            .status(StatusEstorno.CANCELADO.name())
+            .build();
+        TransacaoEstornoDTO transacao1 = TransacaoEstornoDTO.builder()
+            .descricao(desc1)
+            .build();
+        EstornoResponseDTO estorno1 = EstornoResponseDTO.builder()
+            .transacao(transacao1)
             .build();
 
-        EstornoResponseDTO estorno2 = EstornoResponseDTO.builder()
-            .idEstorno(UUID.randomUUID().toString())
-            .status(StatusEstorno.NEGADO)
+        DescricaoEstornoDTO desc2 = DescricaoEstornoDTO.builder()
             .valor(new BigDecimal("200.00"))
+            .status(StatusEstorno.NEGADO.name())
+            .build();
+        TransacaoEstornoDTO transacao2 = TransacaoEstornoDTO.builder()
+            .descricao(desc2)
+            .build();
+        EstornoResponseDTO estorno2 = EstornoResponseDTO.builder()
+            .transacao(transacao2)
             .build();
 
         List<EstornoResponseDTO> estornos = Arrays.asList(estorno1, estorno2);
@@ -276,10 +314,10 @@ class EstornoControllerTest {
         mockMvc.perform(get("/estornos"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$", hasSize(2)))
-            .andExpect(jsonPath("$[0].status").value("CANCELADO"))
-            .andExpect(jsonPath("$[0].valor").value(100.00))
-            .andExpect(jsonPath("$[1].status").value("NEGADO"))
-            .andExpect(jsonPath("$[1].valor").value(200.00));
+            .andExpect(jsonPath("$[0].transacao.descricao.status").value("CANCELADO"))
+            .andExpect(jsonPath("$[0].transacao.descricao.valor").value(100.00))
+            .andExpect(jsonPath("$[1].transacao.descricao.status").value("NEGADO"))
+            .andExpect(jsonPath("$[1].transacao.descricao.valor").value(200.00));
 
         verify(estornoService, times(1)).listarEstornos();
     }
@@ -300,18 +338,28 @@ class EstornoControllerTest {
         // Arrange
         String idTransacao = UUID.randomUUID().toString();
 
-        EstornoResponseDTO estorno1 = EstornoResponseDTO.builder()
-            .idEstorno(UUID.randomUUID().toString())
-            .idTransacao(idTransacao)
-            .status(StatusEstorno.NEGADO)
+        DescricaoEstornoDTO desc1 = DescricaoEstornoDTO.builder()
             .valor(new BigDecimal("150.00"))
+            .status(StatusEstorno.NEGADO.name())
+            .build();
+        TransacaoEstornoDTO transacao1 = TransacaoEstornoDTO.builder()
+            .id(idTransacao)
+            .descricao(desc1)
+            .build();
+        EstornoResponseDTO estorno1 = EstornoResponseDTO.builder()
+            .transacao(transacao1)
             .build();
 
-        EstornoResponseDTO estorno2 = EstornoResponseDTO.builder()
-            .idEstorno(UUID.randomUUID().toString())
-            .idTransacao(idTransacao)
-            .status(StatusEstorno.CANCELADO)
+        DescricaoEstornoDTO desc2 = DescricaoEstornoDTO.builder()
             .valor(new BigDecimal("150.00"))
+            .status(StatusEstorno.CANCELADO.name())
+            .build();
+        TransacaoEstornoDTO transacao2 = TransacaoEstornoDTO.builder()
+            .id(idTransacao)
+            .descricao(desc2)
+            .build();
+        EstornoResponseDTO estorno2 = EstornoResponseDTO.builder()
+            .transacao(transacao2)
             .build();
 
         List<EstornoResponseDTO> estornos = Arrays.asList(estorno1, estorno2);
@@ -323,10 +371,10 @@ class EstornoControllerTest {
         mockMvc.perform(get("/estornos/pagamento/{idTransacao}", idTransacao))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$", hasSize(2)))
-            .andExpect(jsonPath("$[0].idTransacao").value(idTransacao))
-            .andExpect(jsonPath("$[0].status").value("NEGADO"))
-            .andExpect(jsonPath("$[1].idTransacao").value(idTransacao))
-            .andExpect(jsonPath("$[1].status").value("CANCELADO"));
+            .andExpect(jsonPath("$[0].transacao.id").value(idTransacao))
+            .andExpect(jsonPath("$[0].transacao.descricao.status").value("NEGADO"))
+            .andExpect(jsonPath("$[1].transacao.id").value(idTransacao))
+            .andExpect(jsonPath("$[1].transacao.descricao.status").value("CANCELADO"));
 
         verify(estornoService, times(1)).listarPorIdTransacao(idTransacao);
     }
@@ -345,16 +393,26 @@ class EstornoControllerTest {
     @DisplayName("8. GET /estornos/status/{status} → 200 OK")
     void deveListarEstornosPorStatus() throws Exception {
         // Arrange
-        EstornoResponseDTO estorno1 = EstornoResponseDTO.builder()
-            .idEstorno(UUID.randomUUID().toString())
-            .status(StatusEstorno.CANCELADO)
+        DescricaoEstornoDTO desc1 = DescricaoEstornoDTO.builder()
             .valor(new BigDecimal("100.00"))
+            .status(StatusEstorno.CANCELADO.name())
+            .build();
+        TransacaoEstornoDTO transacao1 = TransacaoEstornoDTO.builder()
+            .descricao(desc1)
+            .build();
+        EstornoResponseDTO estorno1 = EstornoResponseDTO.builder()
+            .transacao(transacao1)
             .build();
 
-        EstornoResponseDTO estorno2 = EstornoResponseDTO.builder()
-            .idEstorno(UUID.randomUUID().toString())
-            .status(StatusEstorno.CANCELADO)
+        DescricaoEstornoDTO desc2 = DescricaoEstornoDTO.builder()
             .valor(new BigDecimal("200.00"))
+            .status(StatusEstorno.CANCELADO.name())
+            .build();
+        TransacaoEstornoDTO transacao2 = TransacaoEstornoDTO.builder()
+            .descricao(desc2)
+            .build();
+        EstornoResponseDTO estorno2 = EstornoResponseDTO.builder()
+            .transacao(transacao2)
             .build();
 
         List<EstornoResponseDTO> estornos = Arrays.asList(estorno1, estorno2);
@@ -366,8 +424,8 @@ class EstornoControllerTest {
         mockMvc.perform(get("/estornos/status/{status}", "CANCELADO"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$", hasSize(2)))
-            .andExpect(jsonPath("$[0].status").value("CANCELADO"))
-            .andExpect(jsonPath("$[1].status").value("CANCELADO"));
+            .andExpect(jsonPath("$[0].transacao.descricao.status").value("CANCELADO"))
+            .andExpect(jsonPath("$[1].transacao.descricao.status").value("CANCELADO"));
 
         verify(estornoService, times(1)).listarPorStatus(StatusEstorno.CANCELADO);
     }

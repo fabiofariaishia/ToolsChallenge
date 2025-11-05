@@ -127,7 +127,7 @@ class PagamentoControllerTest {
             .formaPagamento(formaPagamento)
             .nsu("123456789")
             .codigoAutorizacao("AUTH987654")
-            .status(StatusPagamento.AUTORIZADO)
+            .status(StatusPagamento.AUTORIZADO.name())
             .build();
 
         PagamentoResponseDTO responseEsperado = PagamentoResponseDTO.builder()
@@ -183,7 +183,7 @@ class PagamentoControllerTest {
             .id(idTransacao)
             .descricao(descricao)
             .formaPagamento(formaPagamento)
-            .status(StatusPagamento.AUTORIZADO)
+            .status(StatusPagamento.AUTORIZADO.name())
             .nsu("987654321")
             .codigoAutorizacao("AUTH123456")
             .build();
@@ -252,7 +252,7 @@ class PagamentoControllerTest {
                 .estabelecimento("Loja ABC")
                 .valor(new BigDecimal("100.00"))
                 .build())
-            .status(StatusPagamento.AUTORIZADO)
+            .status(StatusPagamento.AUTORIZADO.name())
             .build();
 
         TransacaoDTO transacao2 = TransacaoDTO.builder()
@@ -261,7 +261,7 @@ class PagamentoControllerTest {
                 .estabelecimento("Loja XYZ")
                 .valor(new BigDecimal("200.00"))
                 .build())
-            .status(StatusPagamento.NEGADO)
+            .status(StatusPagamento.NEGADO.name())
             .build();
 
         PagamentoResponseDTO pagamento1 = PagamentoResponseDTO.builder()

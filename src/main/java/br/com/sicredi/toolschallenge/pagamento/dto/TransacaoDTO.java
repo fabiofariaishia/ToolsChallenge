@@ -1,6 +1,5 @@
 package br.com.sicredi.toolschallenge.pagamento.dto;
 
-import br.com.sicredi.toolschallenge.pagamento.domain.StatusPagamento;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -110,9 +109,8 @@ public class TransacaoDTO {
      * Presente apenas na response.
      */
     @Schema(
-        description = "Status atual do pagamento",
-        example = "AUTORIZADO",
-        allowableValues = {"PENDENTE", "AUTORIZADO", "NEGADO"}
+        description = "Status atual da transação (AUTORIZADO/NEGADO/PENDENTE)",
+        example = "AUTORIZADO"
     )
-    private StatusPagamento status;
+    private String status;
 }

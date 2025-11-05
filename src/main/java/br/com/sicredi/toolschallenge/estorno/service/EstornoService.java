@@ -203,7 +203,7 @@ public class EstornoService {
             log.info("Estorno {} finalizado - Status: {}", 
                 estorno.getIdEstorno(), estorno.getStatus());
 
-            return mapper.paraDTO(estorno);
+            return mapper.paraDTO(estorno, pagamento);
             
         } catch (InterruptedException e) {
             // Restaurar flag de interrupção da thread
@@ -236,7 +236,14 @@ public class EstornoService {
                 return new RecursoNaoEncontradoException("Estorno", idEstorno);
             });
 
-        return mapper.paraDTO(estorno);
+        // Buscar pagamento original para montar TransacaoDTO completa
+        Pagamento pagamento = pagamentoRepository.findByIdTransacao(estorno.getIdTransacao())
+            .orElseThrow(() -> {
+                log.error("Pagamento não encontrado para estorno: {}", estorno.getIdTransacao());
+                return new RecursoNaoEncontradoException("Pagamento", estorno.getIdTransacao());
+            });
+
+        return mapper.paraDTO(estorno, pagamento);
     }
 
     /**
@@ -248,10 +255,17 @@ public class EstornoService {
     public List<EstornoResponseDTO> listarPorIdTransacao(String idTransacao) {
         log.info("Listando estornos do pagamento: {}", idTransacao);
 
+        // Buscar pagamento uma única vez
+        Pagamento pagamento = pagamentoRepository.findByIdTransacao(idTransacao)
+            .orElseThrow(() -> {
+                log.warn("Pagamento não encontrado: {}", idTransacao);
+                return new RecursoNaoEncontradoException("Pagamento", idTransacao);
+            });
+
         List<Estorno> estornos = repository.findByIdTransacaoPagamento(idTransacao);
 
         return estornos.stream()
-            .map(mapper::paraDTO)
+            .map(estorno -> mapper.paraDTO(estorno, pagamento))
             .collect(Collectors.toList());
     }
 
@@ -266,7 +280,12 @@ public class EstornoService {
         List<Estorno> estornos = repository.findUltimosEstornos();
 
         return estornos.stream()
-            .map(mapper::paraDTO)
+            .map(estorno -> {
+                // Buscar pagamento para cada estorno
+                Pagamento pagamento = pagamentoRepository.findByIdTransacao(estorno.getIdTransacao())
+                    .orElseThrow(() -> new RecursoNaoEncontradoException("Pagamento", estorno.getIdTransacao()));
+                return mapper.paraDTO(estorno, pagamento);
+            })
             .collect(Collectors.toList());
     }
 
@@ -282,7 +301,12 @@ public class EstornoService {
         List<Estorno> estornos = repository.findByStatusOrderByCriadoEmDesc(status);
 
         return estornos.stream()
-            .map(mapper::paraDTO)
+            .map(estorno -> {
+                // Buscar pagamento para cada estorno
+                Pagamento pagamento = pagamentoRepository.findByIdTransacao(estorno.getIdTransacao())
+                    .orElseThrow(() -> new RecursoNaoEncontradoException("Pagamento", estorno.getIdTransacao()));
+                return mapper.paraDTO(estorno, pagamento);
+            })
             .collect(Collectors.toList());
     }
 

@@ -5,9 +5,11 @@ import br.com.sicredi.toolschallenge.adquirente.dto.AutorizacaoResponse;
 import br.com.sicredi.toolschallenge.adquirente.service.AdquirenteService;
 import br.com.sicredi.toolschallenge.estorno.domain.Estorno;
 import br.com.sicredi.toolschallenge.estorno.domain.StatusEstorno;
+import br.com.sicredi.toolschallenge.estorno.dto.DescricaoEstornoDTO;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoMapper;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoRequestDTO;
 import br.com.sicredi.toolschallenge.estorno.dto.EstornoResponseDTO;
+import br.com.sicredi.toolschallenge.estorno.dto.TransacaoEstornoDTO;
 import br.com.sicredi.toolschallenge.estorno.events.EstornoCriadoEvento;
 import br.com.sicredi.toolschallenge.estorno.events.EstornoStatusAlteradoEvento;
 import br.com.sicredi.toolschallenge.shared.config.ReprocessamentoProperties;
@@ -157,22 +159,28 @@ class EstornoServiceTest {
         when(adquirenteService.processarEstorno(any(AutorizacaoRequest.class)))
             .thenReturn(autorizacaoAprovada);
         
-        EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
-            .idEstorno("EST-123-TEST")
-            .status(StatusEstorno.CANCELADO)
+        // Construir DTO de resposta com nova estrutura aninhada
+        DescricaoEstornoDTO descricao = DescricaoEstornoDTO.builder()
+            .status(StatusEstorno.CANCELADO.name())
             .nsu("NSU123456")
             .codigoAutorizacao("AUTH001")
             .build();
-        when(mapper.paraDTO(any(Estorno.class))).thenReturn(responseDTO);
+        TransacaoEstornoDTO transacao = TransacaoEstornoDTO.builder()
+            .descricao(descricao)
+            .build();
+        EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
+            .transacao(transacao)
+            .build();
+        when(mapper.paraDTO(any(Estorno.class), any(Pagamento.class))).thenReturn(responseDTO);
 
         // Act
         EstornoResponseDTO resultado = estornoService.criarEstorno(requestDTO);
 
         // Assert
         assertThat(resultado).isNotNull();
-        assertThat(resultado.getStatus()).isEqualTo(StatusEstorno.CANCELADO);
-        assertThat(resultado.getNsu()).isEqualTo("NSU123456");
-        assertThat(resultado.getCodigoAutorizacao()).isEqualTo("AUTH001");
+        assertThat(resultado.getTransacao().getDescricao().getStatus()).isEqualTo(StatusEstorno.CANCELADO.name());
+        assertThat(resultado.getTransacao().getDescricao().getNsu()).isEqualTo("NSU123456");
+        assertThat(resultado.getTransacao().getDescricao().getCodigoAutorizacao()).isEqualTo("AUTH001");
 
         // Verificar interações
         verify(pagamentoRepository).findByIdTransacao("TXN-123-TEST");
@@ -304,20 +312,26 @@ class EstornoServiceTest {
         when(adquirenteService.processarEstorno(any(AutorizacaoRequest.class)))
             .thenReturn(autorizacaoAprovada);
 
-        EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
-            .status(StatusEstorno.CANCELADO)
+        DescricaoEstornoDTO descricao = DescricaoEstornoDTO.builder()
+            .status(StatusEstorno.CANCELADO.name())
             .nsu("NSU123456")
             .codigoAutorizacao("AUTH001")
             .build();
-        when(mapper.paraDTO(any(Estorno.class))).thenReturn(responseDTO);
+        TransacaoEstornoDTO transacao = TransacaoEstornoDTO.builder()
+            .descricao(descricao)
+            .build();
+        EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
+            .transacao(transacao)
+            .build();
+        when(mapper.paraDTO(any(Estorno.class), any(Pagamento.class))).thenReturn(responseDTO);
 
         // Act
         EstornoResponseDTO resultado = estornoService.criarEstorno(requestDTO);
 
         // Assert
-        assertThat(resultado.getStatus()).isEqualTo(StatusEstorno.CANCELADO);
-        assertThat(resultado.getNsu()).isEqualTo("NSU123456");
-        assertThat(resultado.getCodigoAutorizacao()).isEqualTo("AUTH001");
+        assertThat(resultado.getTransacao().getDescricao().getStatus()).isEqualTo(StatusEstorno.CANCELADO.name());
+        assertThat(resultado.getTransacao().getDescricao().getNsu()).isEqualTo("NSU123456");
+        assertThat(resultado.getTransacao().getDescricao().getCodigoAutorizacao()).isEqualTo("AUTH001");
 
         verify(adquirenteService).processarEstorno(any(AutorizacaoRequest.class));
     }
@@ -342,16 +356,22 @@ class EstornoServiceTest {
         when(adquirenteService.processarEstorno(any(AutorizacaoRequest.class)))
             .thenReturn(autorizacaoNegada);
 
-        EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
-            .status(StatusEstorno.NEGADO)
+        DescricaoEstornoDTO descricao = DescricaoEstornoDTO.builder()
+            .status(StatusEstorno.NEGADO.name())
             .build();
-        when(mapper.paraDTO(any(Estorno.class))).thenReturn(responseDTO);
+        TransacaoEstornoDTO transacao = TransacaoEstornoDTO.builder()
+            .descricao(descricao)
+            .build();
+        EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
+            .transacao(transacao)
+            .build();
+        when(mapper.paraDTO(any(Estorno.class), any(Pagamento.class))).thenReturn(responseDTO);
 
         // Act
         EstornoResponseDTO resultado = estornoService.criarEstorno(requestDTO);
 
         // Assert
-        assertThat(resultado.getStatus()).isEqualTo(StatusEstorno.NEGADO);
+        assertThat(resultado.getTransacao().getDescricao().getStatus()).isEqualTo(StatusEstorno.NEGADO.name());
 
         verify(adquirenteService).processarEstorno(any(AutorizacaoRequest.class));
     }
@@ -376,16 +396,22 @@ class EstornoServiceTest {
         when(adquirenteService.processarEstorno(any(AutorizacaoRequest.class)))
             .thenReturn(autorizacaoPendente);
 
-        EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
-            .status(StatusEstorno.PENDENTE)
+        DescricaoEstornoDTO descricao = DescricaoEstornoDTO.builder()
+            .status(StatusEstorno.PENDENTE.name())
             .build();
-        when(mapper.paraDTO(any(Estorno.class))).thenReturn(responseDTO);
+        TransacaoEstornoDTO transacao = TransacaoEstornoDTO.builder()
+            .descricao(descricao)
+            .build();
+        EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
+            .transacao(transacao)
+            .build();
+        when(mapper.paraDTO(any(Estorno.class), any(Pagamento.class))).thenReturn(responseDTO);
 
         // Act
         EstornoResponseDTO resultado = estornoService.criarEstorno(requestDTO);
 
         // Assert
-        assertThat(resultado.getStatus()).isEqualTo(StatusEstorno.PENDENTE);
+        assertThat(resultado.getTransacao().getDescricao().getStatus()).isEqualTo(StatusEstorno.PENDENTE.name());
 
         verify(adquirenteService).processarEstorno(any(AutorizacaoRequest.class));
     }
@@ -410,10 +436,16 @@ class EstornoServiceTest {
         when(adquirenteService.processarEstorno(any(AutorizacaoRequest.class)))
             .thenReturn(autorizacaoAprovada);
 
-        EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
-            .status(StatusEstorno.CANCELADO)
+        DescricaoEstornoDTO descricao = DescricaoEstornoDTO.builder()
+            .status(StatusEstorno.CANCELADO.name())
             .build();
-        when(mapper.paraDTO(any(Estorno.class))).thenReturn(responseDTO);
+        TransacaoEstornoDTO transacao = TransacaoEstornoDTO.builder()
+            .descricao(descricao)
+            .build();
+        EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
+            .transacao(transacao)
+            .build();
+        when(mapper.paraDTO(any(Estorno.class), any(Pagamento.class))).thenReturn(responseDTO);
 
         // Act
         estornoService.criarEstorno(requestDTO);
@@ -433,23 +465,23 @@ class EstornoServiceTest {
         // Arrange
         Estorno estornoExistente = new Estorno();
         estornoExistente.setIdEstorno("EST-123-TEST");
+        estornoExistente.setIdTransacao("TXN-123-TEST");
         estornoExistente.setStatus(StatusEstorno.CANCELADO);
 
         when(repository.findByIdEstorno("EST-123-TEST"))
             .thenReturn(Optional.of(estornoExistente));
+        when(pagamentoRepository.findByIdTransacao("TXN-123-TEST"))
+            .thenReturn(Optional.of(pagamento));
 
         EstornoResponseDTO responseDTO = EstornoResponseDTO.builder()
-            .idEstorno("EST-123-TEST")
-            .status(StatusEstorno.CANCELADO)
             .build();
-        when(mapper.paraDTO(estornoExistente)).thenReturn(responseDTO);
+        when(mapper.paraDTO(any(Estorno.class), any(Pagamento.class))).thenReturn(responseDTO);
 
         // Act
         EstornoResponseDTO resultado = estornoService.buscarPorIdEstorno("EST-123-TEST");
 
         // Assert
         assertThat(resultado).isNotNull();
-        assertThat(resultado.getIdEstorno()).isEqualTo("EST-123-TEST");
 
         verify(repository).findByIdEstorno("EST-123-TEST");
     }
@@ -483,18 +515,18 @@ class EstornoServiceTest {
 
         when(repository.findByIdTransacaoPagamento("TXN-123-TEST"))
             .thenReturn(Arrays.asList(estorno1));
+        when(pagamentoRepository.findByIdTransacao("TXN-123-TEST"))
+            .thenReturn(Optional.of(pagamento));
 
         EstornoResponseDTO dto1 = EstornoResponseDTO.builder()
-            .idEstorno("EST-001")
             .build();
-        when(mapper.paraDTO(estorno1)).thenReturn(dto1);
+        when(mapper.paraDTO(any(Estorno.class), any(Pagamento.class))).thenReturn(dto1);
 
         // Act
         List<EstornoResponseDTO> resultados = estornoService.listarPorIdTransacao("TXN-123-TEST");
 
         // Assert
         assertThat(resultados).hasSize(1);
-        assertThat(resultados.get(0).getIdEstorno()).isEqualTo("EST-001");
 
         verify(repository).findByIdTransacaoPagamento("TXN-123-TEST");
     }
@@ -506,14 +538,17 @@ class EstornoServiceTest {
     void deveListarTodos() {
         // Arrange
         Estorno estorno1 = new Estorno();
+        estorno1.setIdTransacao("TXN-001");
         Estorno estorno2 = new Estorno();
+        estorno2.setIdTransacao("TXN-002");
 
         when(repository.findUltimosEstornos()).thenReturn(Arrays.asList(estorno1, estorno2));
+        when(pagamentoRepository.findByIdTransacao("TXN-001")).thenReturn(Optional.of(pagamento));
+        when(pagamentoRepository.findByIdTransacao("TXN-002")).thenReturn(Optional.of(pagamento));
 
         EstornoResponseDTO dto1 = EstornoResponseDTO.builder().build();
         EstornoResponseDTO dto2 = EstornoResponseDTO.builder().build();
-        when(mapper.paraDTO(estorno1)).thenReturn(dto1);
-        when(mapper.paraDTO(estorno2)).thenReturn(dto2);
+        when(mapper.paraDTO(any(Estorno.class), any(Pagamento.class))).thenReturn(dto1, dto2);
 
         // Act
         List<EstornoResponseDTO> resultados = estornoService.listarEstornos();
@@ -531,22 +566,31 @@ class EstornoServiceTest {
     void deveListarPorStatus() {
         // Arrange
         Estorno estorno1 = new Estorno();
+        estorno1.setIdTransacao("TXN-123-TEST");
         estorno1.setStatus(StatusEstorno.CANCELADO);
 
         when(repository.findByStatusOrderByCriadoEmDesc(StatusEstorno.CANCELADO))
             .thenReturn(Arrays.asList(estorno1));
+        when(pagamentoRepository.findByIdTransacao("TXN-123-TEST"))
+            .thenReturn(Optional.of(pagamento));
 
-        EstornoResponseDTO dto1 = EstornoResponseDTO.builder()
-            .status(StatusEstorno.CANCELADO)
+        DescricaoEstornoDTO descricao = DescricaoEstornoDTO.builder()
+            .status(StatusEstorno.CANCELADO.name())
             .build();
-        when(mapper.paraDTO(estorno1)).thenReturn(dto1);
+        TransacaoEstornoDTO transacao = TransacaoEstornoDTO.builder()
+            .descricao(descricao)
+            .build();
+        EstornoResponseDTO dto1 = EstornoResponseDTO.builder()
+            .transacao(transacao)
+            .build();
+        when(mapper.paraDTO(any(Estorno.class), any(Pagamento.class))).thenReturn(dto1);
 
         // Act
         List<EstornoResponseDTO> resultados = estornoService.listarPorStatus(StatusEstorno.CANCELADO);
 
         // Assert
         assertThat(resultados).hasSize(1);
-        assertThat(resultados.get(0).getStatus()).isEqualTo(StatusEstorno.CANCELADO);
+        assertThat(resultados.get(0).getTransacao().getDescricao().getStatus()).isEqualTo(StatusEstorno.CANCELADO.name());
 
         verify(repository).findByStatusOrderByCriadoEmDesc(StatusEstorno.CANCELADO);
     }

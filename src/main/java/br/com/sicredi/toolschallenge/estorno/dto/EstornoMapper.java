@@ -1,10 +1,14 @@
 package br.com.sicredi.toolschallenge.estorno.dto;
 
 import br.com.sicredi.toolschallenge.estorno.domain.Estorno;
+import br.com.sicredi.toolschallenge.pagamento.domain.Pagamento;
 import org.springframework.stereotype.Component;
 
 /**
  * Mapper manual para conversão entre Entidade e DTOs de Estorno.
+ * 
+ * IMPORTANTE: Usa DTOs próprios do módulo estorno (TransacaoEstornoDTO, DescricaoEstornoDTO, FormaPagamentoEstornoDTO)
+ * para garantir independência entre módulos (arquitetura monolito modular).
  */
 @Component
 public class EstornoMapper {
@@ -28,42 +32,48 @@ public class EstornoMapper {
     }
 
     /**
-     * Converte entidade para DTO de response.
+     * Converte entidade Estorno + Pagamento para DTO de response com estrutura aninhada.
      * 
-     * @param entidade Entidade Estorno
-     * @return DTO de resposta
+     * @param estorno Entidade Estorno com dados do estorno
+     * @param pagamento Entidade Pagamento original (para pegar dados da transação)
+     * @return DTO de resposta com estrutura TransacaoEstornoDTO
      */
-    public EstornoResponseDTO paraDTO(Estorno entidade) {
-        if (entidade == null) {
+    public EstornoResponseDTO paraDTO(Estorno estorno, Pagamento pagamento) {
+        if (estorno == null || pagamento == null) {
             return null;
         }
 
-        return EstornoResponseDTO.builder()
-            .idTransacao(entidade.getIdTransacao())
-            .idEstorno(entidade.getIdEstorno())
-            .status(entidade.getStatus())
-            .valor(entidade.getValor())
-            .dataHora(entidade.getDataHora())
-            .nsu(entidade.getNsu())
-            .codigoAutorizacao(entidade.getCodigoAutorizacao())
-            .motivo(entidade.getMotivo())
-            .criadoEm(entidade.getCriadoEm())
-            .atualizadoEm(entidade.getAtualizadoEm())
-            .build();
-    }
+        // Formatar data/hora no padrão dd/MM/yyyy HH:mm:ss
+        String dataHoraFormatada = pagamento.getDataHora().format(
+            java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")
+        );
 
-    /**
-     * Converte entidade para DTO de response com mensagem customizada.
-     * 
-     * @param entidade Entidade Estorno
-     * @param mensagem Mensagem adicional
-     * @return DTO de resposta com mensagem
-     */
-    public EstornoResponseDTO paraDTO(Estorno entidade, String mensagem) {
-        EstornoResponseDTO dto = paraDTO(entidade);
-        if (dto != null) {
-            dto.setMensagem(mensagem);
-        }
-        return dto;
+        // Construir DescricaoEstornoDTO com dados do pagamento original + dados do ESTORNO
+        DescricaoEstornoDTO descricao = DescricaoEstornoDTO.builder()
+            .valor(pagamento.getValor())
+            .dataHora(dataHoraFormatada)  // String formatada
+            .estabelecimento(pagamento.getEstabelecimento())
+            .nsu(estorno.getNsu())  // NSU do ESTORNO (pode ser null se PENDENTE/NEGADO)
+            .codigoAutorizacao(estorno.getCodigoAutorizacao())  // Código do ESTORNO (pode ser null)
+            .status(estorno.getStatus().name())  // Status do ESTORNO: "CANCELADO", "PENDENTE", "NEGADO"
+            .build();
+
+        // Construir FormaPagamentoEstornoDTO com dados do pagamento original
+        FormaPagamentoEstornoDTO formaPagamento = FormaPagamentoEstornoDTO.builder()
+            .tipo(pagamento.getTipoPagamento().name())  // Converter enum para String
+            .parcelas(pagamento.getParcelas())
+            .build();
+
+        // Construir TransacaoEstornoDTO
+        TransacaoEstornoDTO transacao = TransacaoEstornoDTO.builder()
+            .cartao(pagamento.getCartaoMascarado())
+            .id(pagamento.getIdTransacao())
+            .descricao(descricao)  // Contém nsu/codigoAutorizacao/status do ESTORNO
+            .formaPagamento(formaPagamento)
+            .build();
+
+        return EstornoResponseDTO.builder()
+            .transacao(transacao)
+            .build();
     }
 }

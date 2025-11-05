@@ -92,7 +92,62 @@ public class EstornoController {
         @ApiResponse(
             responseCode = "201",
             description = "Estorno criado e processado com sucesso",
-            content = @Content(schema = @Schema(implementation = EstornoResponseDTO.class))
+            content = @Content(
+                mediaType = "application/json",
+                schema = @Schema(implementation = EstornoResponseDTO.class),
+                examples = {
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(
+                        name = "Estorno cancelado",
+                        summary = "Estorno autorizado pelo adquirente",
+                        description = "Exemplo de estorno processado com sucesso - status CANCELADO",
+                        value = """
+                            {
+                              "transacao": {
+                                "cartao": "4444********1234",
+                                "id": "10002356890001",
+                                "descricao": {
+                                  "valor": 50.00,
+                                  "dataHora": "01/05/2021 18:30:00",
+                                  "estabelecimento": "PetShop Mundo cão",
+                                  "nsu": "1234567890",
+                                  "codigoAutorizacao": "147258369",
+                                  "status": "CANCELADO"
+                                },
+                                "formaPagamento": {
+                                  "tipo": "AVISTA",
+                                  "parcelas": 1
+                                }
+                              }
+                            }
+                            """
+                    ),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(
+                        name = "Estorno negado",
+                        summary = "Estorno rejeitado pelo adquirente",
+                        description = "Exemplo de estorno negado - status NEGADO",
+                        value = """
+                            {
+                              "transacao": {
+                                "cartao": "5555********6789",
+                                "id": "10002356890002",
+                                "descricao": {
+                                  "valor": 200.00,
+                                  "dataHora": "02/05/2021 10:15:00",
+                                  "estabelecimento": "Restaurante Bom Sabor",
+                                  "nsu": null,
+                                  "codigoAutorizacao": null,
+                                  "status": "NEGADO"
+                                },
+                                "formaPagamento": {
+                                  "tipo": "PARCELADO_LOJA",
+                                  "parcelas": 3
+                                }
+                              }
+                            }
+                            """
+                    )
+                }
+            )
         ),
         @ApiResponse(
             responseCode = "400",
@@ -129,8 +184,9 @@ public class EstornoController {
 
         EstornoResponseDTO response = service.criarEstorno(request);
 
-        log.info("Estorno criado: {} - Status: {}", 
-            response.getIdEstorno(), response.getStatus());
+        log.info("Estorno criado para transação: {} - Status: {}", 
+            response.getTransacao().getId(), 
+            response.getTransacao().getDescricao().getStatus());
 
         return ResponseEntity
             .status(HttpStatus.CREATED)
